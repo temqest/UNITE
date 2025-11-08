@@ -36,16 +36,44 @@ export default function CampaignToolbar({
     defaultTab = "all"
 }: CampaignToolbarProps) {
     const [selectedTab, setSelectedTab] = useState(defaultTab);
-    const [selectedEventType, setSelectedEventType] = useState(new Set(["blood-drive"]));
+    // Initialize with null first, then update in useEffect to avoid hydration mismatch
+    const [selectedEventType, setSelectedEventType] = useState<Set<string> | null>(null);
+    
+    // Set initial value in useEffect to ensure it only runs on the client
+    React.useEffect(() => {
+        setSelectedEventType(new Set(["blood-drive"]));
+    }, []);
+    
+    const handleSelectionChange = (keys: any) => {
+        // Convert the selection to a Set<string>
+        const newSelection = new Set<string>();
+        if (keys === 'all') {
+            // Handle 'all' selection if needed
+            // newSelection.add('all');
+        } else if (keys) {
+            // Handle single selection (assuming single selection mode)
+            const key = typeof keys === 'string' ? keys : keys.currentKey;
+            if (key) {
+                newSelection.add(key);
+            }
+        }
+        setSelectedEventType(newSelection);
+    };
     
     // Event type labels and descriptions
-    const eventLabelsMap = {
+    type EventType = keyof {
+        "blood-drive": string;
+        training: string;
+        advocacy: string;
+    };
+    
+    const eventLabelsMap: Record<EventType, string> = {
         "blood-drive": "Blood Drive",
         "training": "Training",
         "advocacy": "Advocacy"
     };
     
-    const eventDescriptionsMap = {
+    const eventDescriptionsMap: Record<EventType, string> = {
         "blood-drive": "Organize a blood donation event",
         "training": "Schedule a training session",
         "advocacy": "Create an advocacy campaign"
@@ -59,11 +87,13 @@ export default function CampaignToolbar({
     };
     
     // Get selected event type value
-    const selectedEventTypeValue = Array.from(selectedEventType)[0] as string;
+    const selectedEventTypeValue = selectedEventType ? Array.from(selectedEventType)[0] as EventType : undefined;
     
     // Handle create event button click
     const handleCreateEvent = () => {
-        onCreateEvent?.(selectedEventTypeValue);
+        if (selectedEventTypeValue) {
+            onCreateEvent?.(selectedEventTypeValue);
+        }
     };
     
     return (
@@ -132,7 +162,7 @@ export default function CampaignToolbar({
                             color="primary"
                             startContent={<Ticket className="w-4 h-4" />}
                         >
-                            {eventLabelsMap[selectedEventTypeValue]}
+                            {selectedEventTypeValue ? eventLabelsMap[selectedEventTypeValue] : 'Create Event'}
                         </Button>
                         <Dropdown placement="bottom-end">
                             <DropdownTrigger>
@@ -147,9 +177,9 @@ export default function CampaignToolbar({
                                 disallowEmptySelection
                                 aria-label="Event type options"
                                 className="max-w-2xl"
-                                selectedKeys={selectedEventType}
+                                selectedKeys={selectedEventType || new Set()}
                                 selectionMode="single"
-                                onSelectionChange={setSelectedEventType}
+                                onSelectionChange={handleSelectionChange}
                             >
                                 <DropdownItem 
                                     key="blood-drive" 
