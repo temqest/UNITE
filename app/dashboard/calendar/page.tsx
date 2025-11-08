@@ -1,5 +1,5 @@
 "use client";
-
+import BdriveModal, { BloodDriveData } from "@/components/bdrive-modal";
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, Tab } from "@heroui/tabs";
@@ -10,6 +10,8 @@ import {
     DropdownMenu,
     DropdownItem,
 } from "@heroui/dropdown";
+import { Input } from "@heroui/input";
+import { Kbd } from "@heroui/kbd";
 import { 
     Search, 
     ChevronDown, 
@@ -34,7 +36,9 @@ export default function CalendarPage() {
   const [isDateTransitioning, setIsDateTransitioning] = useState(false);
   const [isViewTransitioning, setIsViewTransitioning] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
+  const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [isBdriveModalOpen, setIsBdriveModalOpen] = useState(false);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -106,6 +110,26 @@ export default function CalendarPage() {
       }
     }
     setSelectedEventType(newSelection);
+  };
+
+  // Handle create event button click - UPDATED
+  const handleCreateEvent = () => {
+    if (selectedEventTypeValue === "blood-drive") {
+      setIsBdriveModalOpen(true);
+    } else {
+      console.log(`Creating event: ${selectedEventTypeValue}`);
+      // Handle other event types here
+    }
+  };
+
+  // Handle saving blood drive data - NEW FUNCTION
+  const handleSaveBloodDrive = (data: BloodDriveData) => {
+    console.log("Blood drive data:", data);
+    // Here you would typically save the data to your backend
+    setIsBdriveModalOpen(false);
+    
+    // Reset form or handle the created event
+    // You might want to refresh the calendar events here
   };
 
   // Date formatting functions
@@ -264,13 +288,6 @@ export default function CalendarPage() {
   // Get selected event type value
   const selectedEventTypeValue = selectedEventType ? Array.from(selectedEventType)[0] as EventType : undefined;
 
-  // Handle create event button click
-  const handleCreateEvent = () => {
-    if (selectedEventTypeValue) {
-      console.log(`Creating event: ${selectedEventTypeValue}`);
-    }
-  };
-
   const handleViewChange = (view: string) => {
     setIsViewTransitioning(true);
     setTimeout(() => {
@@ -314,6 +331,26 @@ export default function CalendarPage() {
       opacity: 0
     })
   };
+
+  // Handle search input changes
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    // Add search functionality here
+  };
+
+  // Handle keyboard shortcuts (Win+K or Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        document.getElementById('calendar-search')?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col overflow-visible bg-white relative">
@@ -379,20 +416,30 @@ export default function CalendarPage() {
               </div>
               
               {/* Search Bar */}
-              <div className="relative">
-                <div className="relative bg-gray-100 rounded-lg border border-gray-300">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search files..."
-                    className="pl-9 pr-20 py-2 w-[200px] text-[13px] border-2 border-transparent bg-transparent rounded-lg focus:outline-none focus:border-gray-900 focus:ring-0 focus:shadow-sm placeholder-gray-400 h-8 transition-all duration-200"
-                  />
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1 bg-gray-50 px-2 py-0.5 rounded-md border border-gray-200">
-                    <kbd className="text-[10px] font-mono text-gray-500">Win</kbd>
-                    <span className="text-[10px] text-gray-400">+</span>
-                    <kbd className="text-[10px] font-mono text-gray-500">K</kbd>
-                  </div>
-                </div>
+              <div className="flex-1 max-w-md ml-auto">
+                <Input
+                  id="calendar-search"
+                  type="text"
+                  placeholder="Search files..."
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  startContent={
+                    <Search className="w-4 h-4 text-gray-400" />
+                  }
+                  endContent={
+                    <div className="flex items-center gap-1">
+                      <Kbd keys={["command"]} className="hidden sm:inline-flex">
+                        K
+                      </Kbd>
+                    </div>
+                  }
+                  radius="md"
+                  size="sm"
+                  classNames={{
+                    inputWrapper: "bg-gray-100 border-gray-300 hover:bg-gray-100",
+                    input: "text-sm"
+                  }}
+                />
               </div>
             </div>
 
@@ -782,6 +829,13 @@ export default function CalendarPage() {
           </div>
         </div>
       </header>
+
+      {/* Blood Drive Modal */}
+      <BdriveModal
+        isOpen={isBdriveModalOpen}
+        onClose={() => setIsBdriveModalOpen(false)}
+        onSave={handleSaveBloodDrive}
+      />
     </div>
   );
 }
