@@ -30,7 +30,7 @@ export default function CampaignPage() {
       organizationType: "Local Government Unit",
       district: "1st District",
       category: "Blood Drive",
-      status: "Approved" as const,
+      status: "Rejected" as const,
       location: "Ateneo Avenue, Bagumbayan Sur, Naga City, 4400 Camarines Sur, Philippines",
       date: "Nov 12, 2025 08:00 - 05:00 AM"
     },

@@ -81,7 +81,6 @@ export default function CampaignToolbar({
                     <Tab key="approved" title="Approved" />
                     <Tab key="pending" title="Pending" />
                     <Tab key="rejected" title="Rejected" />
-                    <Tab key="finished" title="Finished" />
                 </Tabs>
         
                 {/* Right side - Action Buttons */}
