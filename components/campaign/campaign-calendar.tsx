@@ -1,30 +1,30 @@
-    'use client';
-    
-    import React, { useState, useMemo } from 'react';
-    import { Button } from '@heroui/button';
-    import { Card, CardBody, CardHeader } from '@heroui/card';
-    import { ChevronLeft, ChevronRight } from 'lucide-react';
-    import {Chip} from "@heroui/react";
-    
-    /**
-    * CampaignCalendar Component
-    * A fully functional calendar with month/year navigation and time display
-    * 
-    * @param initialDate - Starting date for the calendar (defaults to current date)
-    * @param onDateSelect - Callback when a date is clicked
-    * @param selectedDate - Currently selected date
-    */
-    
-    interface CampaignCalendarProps {
+'use client';
+
+import React, { useState, useMemo } from 'react';
+import { Button } from '@heroui/button';
+import { Card, CardBody, CardHeader, CardFooter } from '@heroui/card';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import {Chip} from "@heroui/react";
+
+/**
+* CampaignCalendar Component
+* A fully functional calendar with month/year navigation and time display
+* 
+* @param initialDate - Starting date for the calendar (defaults to current date)
+* @param onDateSelect - Callback when a date is clicked
+* @param selectedDate - Currently selected date
+*/
+
+interface CampaignCalendarProps {
     initialDate?: Date;
     onDateSelect?: (date: Date) => void;
     selectedDate?: Date;
-    }
+}
     
     const CalendarComponent: React.FC<CampaignCalendarProps> = ({
-    initialDate = new Date(),
-    onDateSelect,
-    selectedDate
+        initialDate = new Date(),
+        onDateSelect,
+        selectedDate
     }) => {
     const [currentDate, setCurrentDate] = useState(initialDate);
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -143,7 +143,7 @@
     };
     
     return (
-        <Card className="w-[480px] shadow-none border border-default-300">
+        <Card className="w-[480px] h-[calc(106vh-300px)] shadow-none border border-default-300">
         <CardHeader className="flex justify-between items-center px-4 py-3">
             <h2 className="text-base font-medium">{monthYear}</h2>
             <div className="flex gap-2 items-center">
@@ -189,7 +189,7 @@
             ))}
             </div>
             
-            {/* Calendar grid */}
+            {/* Calendar Grid */}
             <div className="grid grid-cols-7 gap-1">
             {calendarDays.map((dayInfo, index) => {
                 const today = isToday(dayInfo.date);
@@ -213,25 +213,25 @@
                 );
             })}
             </div>
+            </CardBody>
             
             {/* Time display */}
-            <div className="mt-6 pt-4 ">
-            <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-gray-600">Time</span>
-                <Chip
-                    variant="faded"
-                    radius="sm"
-                >
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono">
-                            {formatTime()}
-                        </span>
-                        <span className="text-xs text-gray-500">EDT</span>
-                    </div>
-                </Chip>
-            </div>
-            </div>
-        </CardBody>
+            <CardFooter className="pt-4">
+                <div className="flex justify-between items-center w-full">
+                    <span className="text-xs font-medium text-gray-600">Time</span>
+                    <Chip
+                        variant="faded"
+                        radius="sm"
+                    >
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono">
+                                {formatTime()}
+                            </span>
+                            <span className="text-xs text-gray-500">PHT</span>
+                        </div>
+                    </Chip>
+                </div>
+            </CardFooter>
         </Card>
     );
     };
@@ -251,4 +251,4 @@
             selectedDate={selectedDate}
         />
     );
-    }
+}

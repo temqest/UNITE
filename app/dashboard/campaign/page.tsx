@@ -2,8 +2,9 @@
 
 import React, { useState } from "react";
 import Topbar from "@/components/topbar";
-import CampaignToolbar from "@/components/campaign-toolbar";
-import CampaignCalendar from "@/components/campaign-calendar";
+import CampaignToolbar from "@/components/campaign/campaign-toolbar";
+import CampaignCalendar from "@/components/campaign/campaign-calendar";
+import EventCard from "@/components/campaign/event-card";
 
 /**
  * Campaign Page Component
@@ -20,6 +21,60 @@ export default function CampaignPage() {
   
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTab, setSelectedTab] = useState("all");
+  
+  // Sample event data
+  const events = [
+    {
+      title: "Lifesavers Blood Drive",
+      organization: "Local Government Unit",
+      organizationType: "Local Government Unit",
+      district: "1st District",
+      category: "Blood Drive",
+      status: "Approved" as const,
+      location: "Ateneo Avenue, Bagumbayan Sur, Naga City, 4400 Camarines Sur, Philippines",
+      date: "Nov 12, 2025 08:00 - 05:00 AM"
+    },
+    {
+      title: "Lifesavers Training",
+      organization: "Local Government Unit",
+      organizationType: "Local Government Unit",
+      district: "1st District",
+      category: "Training",
+      status: "Pending" as const,
+      location: "Ateneo Avenue, Bagumbayan Sur, Naga City, 4400 Camarines Sur, Philippines",
+      date: "Nov 12, 2025 08:00 AM"
+    },
+    {
+      title: "Lifesavers Advocacy",
+      organization: "Local Government Unit",
+      organizationType: "Local Government Unit",
+      district: "1st District",
+      category: "Advocacy",
+      status: "Approved" as const,
+      location: "Ateneo Avenue, Bagumbayan Sur, Naga City, 4400 Sur, Philippines",
+      date: "Nov 12, 2025 08:00 AM"
+    },
+    {
+      title: "Lifesavers Advocacy",
+      organization: "Local Government Unit",
+      organizationType: "Local Government Unit",
+      district: "1st District",
+      category: "Advocacy",
+      status: "Approved" as const,
+      location: "Ateneo Avenue, Bagumbayan Sur, Naga City, 4400 Sur, Philippines",
+      date: "Nov 12, 2025 08:00 AM"
+    },
+    {
+      title: "Lifesavers Advocacy",
+      organization: "Local Government Unit",
+      organizationType: "Local Government Unit",
+      district: "1st District",
+      category: "Advocacy",
+      status: "Approved" as const,
+      location: "Ateneo Avenue, Bagumbayan Sur, Naga City, 4400 Sur, Philippines",
+      date: "Nov 12, 2025 08:00 AM"
+    },
+  ];
   
   // Handler for search functionality
   const handleSearch = (query: string) => {
@@ -84,8 +139,28 @@ export default function CampaignPage() {
       />
   
       {/* Main Content Area */}
-      <div className="px-6 py-6">
-        <CampaignCalendar />
+      <div className="px-6 py-6 flex gap-4">
+        {/* Calendar Section */}
+          <CampaignCalendar />
+        
+        {/* Event Cards Section - Scrollable */}
+        <div className="flex-1 h-[calc(106vh-300px)] overflow-y-auto pr-2">
+            <div className="grid grid-cols-2 gap-4 h-full">
+            {events.map((event, index) => (
+                <EventCard
+                key={index}
+                title={event.title}
+                organization={event.organization}
+                organizationType={event.organizationType}
+                district={event.district}
+                category={event.category}
+                status={event.status}
+                location={event.location}
+                date={event.date}
+                />
+            ))}
+            </div>
+        </div>
       </div>
     </div>
   );
