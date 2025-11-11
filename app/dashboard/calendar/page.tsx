@@ -33,8 +33,8 @@ import { Button } from '@heroui/button';
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from '@heroui/modal';
 import { DatePicker } from '@heroui/date-picker';
 import { Avatar } from '@heroui/avatar';
-import EventViewModal from '@/components/campaign/event-view-modal';
-import EditEventModal from '@/components/campaign/event-edit-modal';
+import EventViewModal from '@/components/calendar/event-view-modal';
+import EditEventModal from '@/components/calendar/event-edit-modal';
 
 export default function CalendarPage() {
   const [activeView, setActiveView] = useState("week");
@@ -164,29 +164,18 @@ export default function CalendarPage() {
         const weekUrl = `${API_BASE}/api/calendar/week?date=${encodeURIComponent(currentDate.toISOString())}&status=Approved`;
         const weekResp = await fetch(weekUrl, { credentials: 'include' });
         const weekJson = await weekResp.json();
-        // Debug: log raw week response and status
-        if (mounted) console.log('Calendar week response', { ok: weekResp.ok, status: weekResp.status, body: weekJson });
+  // Debug: raw week response received (logging removed)
 
         if (mounted && weekResp.ok && weekJson && weekJson.success && weekJson.data) {
           // backend returns week object in `data` with `weekDays` map
           const weekDaysRaw = weekJson.data.weekDays || {};
-          // Debug: show raw weekDays structure and per-key shapes
-          try {
-            if (mounted) console.log('Raw weekDaysRaw keys/shape', Object.keys(weekDaysRaw).map(k => ({ key: k, type: Array.isArray(weekDaysRaw[k]) ? 'array' : typeof weekDaysRaw[k], len: Array.isArray(weekDaysRaw[k]) ? weekDaysRaw[k].length : (weekDaysRaw[k] && typeof weekDaysRaw[k] === 'object' ? Object.keys(weekDaysRaw[k]).length : 0) })));
-          } catch (e) {
-            if (mounted) console.log('Could not stringify weekDaysRaw', e);
-          }
+          // Raw weekDays structure received (logging removed)
 
           // Normalize keys to local YYYY-MM-DD so lookups match the frontend dates
           normalizedWeek = normalizeEventsMap(weekDaysRaw);
           setWeekEventsByDate(normalizedWeek);
-          if (mounted) {
-            const summary = Object.keys(normalizedWeek).map(k => ({ key: k, len: normalizedWeek[k]?.length || 0, ids: (normalizedWeek[k] || []).map((ev: any) => ev?.Event_ID ?? ev?.EventId ?? ev?._id ?? null) }));
-            console.log('Normalized weekEventsByDate summary', { keys: Object.keys(normalizedWeek).slice(0,20), totalCount: summary.reduce((acc, s) => acc + s.len, 0), summary });
-          }
         } else if (mounted) {
           setWeekEventsByDate({});
-          if (mounted) console.log('Week fetch returned no data or not ok', { ok: weekResp.ok, status: weekResp.status, body: weekJson });
         }
 
         // Month endpoint (use year/month from currentDate)
@@ -195,8 +184,7 @@ export default function CalendarPage() {
         const monthUrl = `${API_BASE}/api/calendar/month?year=${year}&month=${month}&status=Approved`;
         const monthResp = await fetch(monthUrl, { credentials: 'include' });
         const monthJson = await monthResp.json();
-        // Debug: log raw month response and status
-        if (mounted) console.log('Calendar month response', { ok: monthResp.ok, status: monthResp.status, body: monthJson });
+  // Raw month response received (logging removed)
 
         if (mounted && monthResp.ok && monthJson && monthJson.success && monthJson.data) {
           // backend returns month object in `data` with `eventsByDate` map
@@ -204,10 +192,8 @@ export default function CalendarPage() {
           // Normalize keys to local YYYY-MM-DD so lookups match the frontend dates
           normalizedMonth = normalizeEventsMap(eventsByDateRaw);
           setMonthEventsByDate(normalizedMonth);
-          if (mounted) console.log('Normalized monthEventsByDate', { keys: Object.keys(normalizedMonth).slice(0,20), counts: Object.keys(normalizedMonth).reduce((acc, k) => (acc + (normalizedMonth[k]?.length || 0)), 0), sample: normalizedMonth[Object.keys(normalizedMonth)[0]] });
         } else if (mounted) {
           setMonthEventsByDate({});
-          if (mounted) console.log('Month fetch returned no data or not ok', { ok: monthResp.ok, status: monthResp.status, body: monthJson });
         }
 
         // If the week data is sparse (multi-day events not expanded), merge month multi-day events into the week view.
@@ -268,11 +254,9 @@ export default function CalendarPage() {
           const origCount = Object.keys(normalizedWeek || {}).reduce((acc, k) => acc + ((normalizedWeek[k] || []).length || 0), 0);
           if (mergedCount > origCount) {
             setWeekEventsByDate(merged);
-            if (mounted) console.log('Merged month multi-day events into week view', { origCount, mergedCount });
           }
         } catch (e) {
           // ignore merge errors
-          if (mounted) console.log('Failed to merge month events into week view', e);
         }
       } catch (error) {
         if (mounted) {
@@ -686,11 +670,21 @@ export default function CalendarPage() {
       const token = localStorage.getItem('unite_token') || sessionStorage.getItem('unite_token');
       const headers: any = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
+      // Always fetch the full event details from backend. Log the raw response to help debugging.
       const res = await fetch(`${API_BASE}/api/events/${encodeURIComponent(eventId)}`, { headers });
-      const body = await res.json();
+  const body = await res.json();
       if (!res.ok) throw new Error(body.message || 'Failed to fetch event details');
-      const data = body.data || body.event || body;
-      setViewRequest(data || rawEvent);
+  // The API may return the full event under different keys; prefer body.data, then body.event, then body
+  const data = body.data || body.event || body;
+  // If the response wraps the event inside a `event` property, prefer that inner object for merging
+  const eventData = (data && data.event) ? data.event : data;
+  // Merge strategy: prefer fetched eventData, but FALLBACK to rawEvent for any fields missing
+  // (some backend handlers return a trimmed `event` object that omits fields like Event_Description)
+  const merged = { ...(eventData || {}), ...(rawEvent || {}) };
+  // Keep the fetched event shape under `event` while exposing merged top-level fields
+  const finalPayload = { ...merged, event: eventData || merged };
+  // merged payload prepared for modal
+  setViewRequest(finalPayload || rawEvent);
       setViewModalOpen(true);
     } catch (err: any) {
       console.error('Failed to load event details', err);
@@ -1022,11 +1016,14 @@ export default function CalendarPage() {
             const weekUrl = `${API_BASE}/api/calendar/week?date=${encodeURIComponent(currentDate.toISOString())}&status=Approved`;
             const w = await fetch(weekUrl, { credentials: 'include' });
             const wj = await w.json();
-            setWeekEventsByDate(wj?.data?.weekDays || {});
+            // normalize the response the same way the main fetch does
+            setWeekEventsByDate(normalizeEventsMap(wj?.data?.weekDays || {}));
+
             const monthUrl = `${API_BASE}/api/calendar/month?year=${year}&month=${month}&status=Approved`;
             const m = await fetch(monthUrl, { credentials: 'include' });
             const mj = await m.json();
-            setMonthEventsByDate(mj?.data?.eventsByDate || {});
+            setMonthEventsByDate(normalizeEventsMap(mj?.data?.eventsByDate || {}));
+            // Note: we don't re-run the full merge logic here; the next automatic fetch (or user navigation) will reconcile multi-day events.
           } catch (e) {
             console.error(e);
           }
