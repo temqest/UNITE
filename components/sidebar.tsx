@@ -25,12 +25,31 @@ export default function Sidebar({ role, userInfo }: SidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
     
+    // Determine role from prop or localStorage when not provided
+    let resolvedRole = role
+    if (!resolvedRole && typeof window !== 'undefined') {
+        try {
+            const raw = localStorage.getItem('unite_user')
+            if (raw) {
+                const parsed = JSON.parse(raw)
+                resolvedRole = parsed.staff_type || parsed.role || parsed.type || resolvedRole
+            }
+        } catch (e) {
+            // ignore
+        }
+    }
+
     const links = [
         { href: "/dashboard/campaign", icon: Ticket },
         { href: "/dashboard/calendar", icon: Calendar },
-        { href: "/dashboard/coordinator-management", icon: UsersRound },
-        { href: "/dashboard/stakeholder-management", icon: ContactRound },
     ];
+
+    // Only show coordinator management link for system admins
+    if (resolvedRole && String(resolvedRole).toLowerCase() === 'admin') {
+        links.push({ href: "/dashboard/coordinator-management", icon: UsersRound })
+    }
+
+    links.push({ href: "/dashboard/stakeholder-management", icon: ContactRound })
     
     const bottomLinks = [{ href: "/notifications", icon: Bell }];
     

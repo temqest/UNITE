@@ -1,7 +1,9 @@
 "use client"
-import { MoreHorizontal } from "lucide-react"
+import { MoreHorizontal, Edit3, Trash2 } from "lucide-react"
 import { Checkbox } from "@heroui/checkbox"
 import { Button } from "@heroui/button"
+import { Dropdown, DropdownTrigger, DropdownMenu, DropdownSection, DropdownItem } from "@heroui/dropdown"
+import { useState } from "react"
 
 
 interface Coordinator {
@@ -20,7 +22,10 @@ interface CoordinatorTableProps {
   onSelectAll: (checked: boolean) => void
   onSelectCoordinator: (id: string, checked: boolean) => void
   onActionClick: (id: string) => void
+  onUpdateCoordinator?: (id: string) => void
+  onDeleteCoordinator?: (id: string, name?: string) => void
   searchQuery: string
+  isAdmin?: boolean
 }
 
 
@@ -30,8 +35,12 @@ export default function CoordinatorTable({
   onSelectAll,
   onSelectCoordinator,
   onActionClick,
+  onUpdateCoordinator,
+  onDeleteCoordinator,
   searchQuery,
+  isAdmin,
 }: CoordinatorTableProps) {
+  const [/*unused*/, setUnused] = useState(false)
   // Filter coordinators based on search query
   const filteredCoordinators = coordinators.filter(
     (coordinator) => {
@@ -119,22 +128,55 @@ export default function CoordinatorTable({
                   {coordinator.district}
                 </td>
                 <td className="px-6 py-4">
-                  <Button
-                    isIconOnly
-                    variant="light"
-                    size="sm"
-                    onPress={() => onActionClick(coordinator.id)}
-                    aria-label={`Actions for ${coordinator.name}`}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <MoreHorizontal size={18} />
-                  </Button>
+                  {/** Only show actions to admins. Non-admins get no action menu. */}
+                  {isAdmin ? (
+                    <Dropdown>
+                      <DropdownTrigger>
+                        <Button
+                          isIconOnly
+                          variant="light"
+                          size="sm"
+                          aria-label={`Actions for ${coordinator.name}`}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <MoreHorizontal size={18} />
+                        </Button>
+                      </DropdownTrigger>
+                      <DropdownMenu aria-label="Coordinator actions" variant="faded">
+                        <DropdownSection title="Actions">
+                          <DropdownItem
+                            key="update"
+                            description="Edit the coordinator's details"
+                            startContent={<Edit3 />}
+                            onPress={() => { if (onUpdateCoordinator) onUpdateCoordinator(coordinator.id) }}
+                          >
+                            Update coordinator
+                          </DropdownItem>
+                        </DropdownSection>
+                        <DropdownSection title="Danger zone">
+                          <DropdownItem
+                            key="delete"
+                            className="text-danger"
+                            color="danger"
+                            description="Permanently remove this coordinator"
+                            startContent={<Trash2 className="text-xl text-danger pointer-events-none shrink-0" />}
+                            onPress={() => { if (onDeleteCoordinator) onDeleteCoordinator(coordinator.id, coordinator.name) }}
+                          >
+                            Delete coordinator
+                          </DropdownItem>
+                        </DropdownSection>
+                      </DropdownMenu>
+                    </Dropdown>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
 
 
       {/* Empty State */}

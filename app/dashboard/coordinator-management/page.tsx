@@ -6,6 +6,8 @@ import Topbar from "@/components/topbar"
 import CoordinatorToolbar from "@/components/coordinator-management/coordinator-management-toolbar"
 import CoordinatorTable from "@/components/coordinator-management/coordinator-management-table"
 import AddCoordinatorModal from "@/components/coordinator-management/add-coordinator-modal"
+import EditCoordinatorModal from "@/components/coordinator-management/coordinator-edit-modal"
+import DeleteCoordinatorModal from "@/components/coordinator-management/delete-coordinator-modal"
 
 
 interface CoordinatorFormData {
@@ -31,6 +33,14 @@ export default function CoordinatorManagement() {
   const [coordinators, setCoordinators] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editingCoordinator, setEditingCoordinator] = useState<any | null>(null)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [deletingCoordinator, setDeletingCoordinator] = useState<{ id: string; name: string } | null>(null)
+
+  const rawUserNow = (typeof window !== 'undefined') ? (localStorage.getItem('unite_user') || null) : null
+  const parsedUser = rawUserNow ? JSON.parse(rawUserNow) : null
+  const isAdmin = !!(parsedUser && ((parsedUser.staff_type && parsedUser.staff_type.toLowerCase() === 'admin') || (parsedUser.role && parsedUser.role.toLowerCase() === 'admin') || (parsedUser.type && parsedUser.type.toLowerCase() === 'admin')))
 
 
   const handleSearch = (query: string) => {
@@ -186,9 +196,66 @@ export default function CoordinatorManagement() {
     console.log("Action clicked for coordinator:", id)
   }
 
+  const handleUpdateCoordinator = (id: string) => {
+    // fetch coordinator details and open edit modal
+    (async () => {
+      try {
+        setLoading(true)
+        const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '')
+        const url = base ? `${base}/api/coordinators/${encodeURIComponent(id)}` : `/api/coordinators/${encodeURIComponent(id)}`
+        const token = (typeof window !== 'undefined') ? (localStorage.getItem('unite_token') || sessionStorage.getItem('unite_token')) : null
+        const headers: any = { 'Content-Type': 'application/json' }
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const res = await fetch(url, { headers })
+        const text = await res.text()
+        const json = text ? JSON.parse(text) : null
+        if (!res.ok) throw new Error(json?.message || `Failed to fetch coordinator (status ${res.status})`)
+        const data = json.data || json.coordinator || json || null
+        setEditingCoordinator(data)
+        setIsEditModalOpen(true)
+      } catch (e: any) {
+        alert(e?.message || 'Failed to load coordinator')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }
+
+  // Instead of immediate delete, show confirm modal that requires typing full name
+  const handleDeleteCoordinator = (id: string, name?: string) => {
+    if (!isAdmin) {
+      alert('Only system admin can delete coordinators')
+      return
+    }
+    setDeletingCoordinator({ id, name: name || '' })
+    setIsDeleteModalOpen(true)
+  }
+
+  const confirmDeleteCoordinator = async (id: string) => {
+    try {
+      setLoading(true)
+      const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '')
+      const url = base ? `${base}/api/coordinators/${encodeURIComponent(id)}` : `/api/coordinators/${encodeURIComponent(id)}`
+      const token = (typeof window !== 'undefined') ? (localStorage.getItem('unite_token') || sessionStorage.getItem('unite_token')) : null
+      const headers: any = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch(url, { method: 'DELETE', headers })
+      const text = await res.text()
+      const json = text ? JSON.parse(text) : null
+      if (!res.ok) throw new Error(json?.message || `Failed to delete coordinator (status ${res.status})`)
+
+      // refresh list
+      await fetchCoordinators()
+    } catch (err: any) {
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }
+
 
   // Fetch coordinators from backend and normalize shape for the table
-  useEffect(() => {
+  const fetchCoordinators = async () => {
     const ordinalSuffix = (n: number | string) => {
       const num = Number(n)
       if (Number.isNaN(num)) return String(n)
@@ -207,72 +274,70 @@ export default function CoordinatorManagement() {
       return ""
     }
 
-    const fetchCoordinators = async () => {
-      setLoading(true)
-      setError(null)
+    setLoading(true)
+    setError(null)
+    try {
+      // Use NEXT_PUBLIC_API_URL from .env.local (inlined at build time)
+      const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '')
+      // get logged-in user and token from local/session storage
+      let rawUser = null
+      try { rawUser = localStorage.getItem('unite_user'); } catch (e) { rawUser = null }
+      const user = rawUser ? JSON.parse(rawUser) : null
+      const token = (typeof window !== 'undefined') ? (localStorage.getItem('unite_token') || sessionStorage.getItem('unite_token')) : null
+
+      // choose admin-managed endpoint when the logged-in user is a System Admin
+      const adminId = user?.id || user?.ID || user?.Staff_ID || user?.StaffId || user?.Admin_ID || user?.adminId || null
+      const isAdmin = (user && ((user.staff_type && user.staff_type.toLowerCase() === 'admin') || (user.role && user.role.toLowerCase() === 'admin') || (user.type && user.type.toLowerCase() === 'admin')))
+
+      const url = base
+        ? (isAdmin && adminId ? `${base}/api/admin/${encodeURIComponent(adminId)}/coordinators?limit=1000` : `${base}/api/coordinators?limit=1000`)
+        : (isAdmin && adminId ? `/api/admin/${encodeURIComponent(adminId)}/coordinators?limit=1000` : `/api/coordinators?limit=1000`)
+
+      const headers: any = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch(url, { headers })
+
+      // Read as text first to avoid JSON parse errors when the server returns HTML (like a 404 page)
+      const text = await res.text()
+      let json: any = null
       try {
-        // Use NEXT_PUBLIC_API_URL from .env.local (inlined at build time)
-        const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '')
-        // get logged-in user and token from local/session storage
-        let rawUser = null
-        try { rawUser = localStorage.getItem('unite_user'); } catch (e) { rawUser = null }
-        const user = rawUser ? JSON.parse(rawUser) : null
-        const token = (typeof window !== 'undefined') ? (localStorage.getItem('unite_token') || sessionStorage.getItem('unite_token')) : null
-
-        // choose admin-managed endpoint when the logged-in user is a System Admin
-        const adminId = user?.id || user?.ID || user?.Staff_ID || user?.StaffId || user?.Admin_ID || user?.adminId || null
-        const isAdmin = (user && ((user.staff_type && user.staff_type.toLowerCase() === 'admin') || (user.role && user.role.toLowerCase() === 'admin') || (user.type && user.type.toLowerCase() === 'admin')))
-
-        const url = base
-          ? (isAdmin && adminId ? `${base}/api/admin/${encodeURIComponent(adminId)}/coordinators?limit=1000` : `${base}/api/coordinators?limit=1000`)
-          : (isAdmin && adminId ? `/api/admin/${encodeURIComponent(adminId)}/coordinators?limit=1000` : `/api/coordinators?limit=1000`)
-
-        const headers: any = {}
-        if (token) headers['Authorization'] = `Bearer ${token}`
-        const res = await fetch(url, { headers })
-
-        // Read as text first to avoid JSON parse errors when the server returns HTML (like a 404 page)
-        const text = await res.text()
-        let json: any = null
-        try {
-          json = text ? JSON.parse(text) : null
-        } catch (parseErr) {
-          // If response is not valid JSON, include a short snippet in the error to help debugging
-          const snippet = text.slice(0, 300)
-          throw new Error(`Invalid JSON response (status ${res.status}): ${snippet}`)
-        }
-
-        if (!res.ok) throw new Error(json?.message || `Failed to fetch coordinators (status ${res.status})`)
-
-        const items = json.data || json.coordinators || []
-        const mapped = items.map((c: any) => {
-          const staff = c.Staff || {}
-          const district = c.District || null
-          const province = c.Province_Name || (district && district.Province_Name) || ''
-          const fullName = [staff.First_Name, staff.Middle_Name, staff.Last_Name]
-            .filter(Boolean)
-            .join(' ')
-
-          return {
-            id: c.Coordinator_ID || staff.ID || '',
-            name: fullName,
-            email: staff.Email || '',
-            phone: staff.Phone_Number || '',
-            province,
-            district: formatDistrict(district)
-          }
-        })
-
-        setCoordinators(mapped)
-      } catch (err: any) {
-        setError(err.message || 'Unknown error')
-      } finally {
-        setLoading(false)
+        json = text ? JSON.parse(text) : null
+      } catch (parseErr) {
+        // If response is not valid JSON, include a short snippet in the error to help debugging
+        const snippet = text.slice(0, 300)
+        throw new Error(`Invalid JSON response (status ${res.status}): ${snippet}`)
       }
-    }
 
-    fetchCoordinators()
-  }, [])
+      if (!res.ok) throw new Error(json?.message || `Failed to fetch coordinators (status ${res.status})`)
+
+      const items = json.data || json.coordinators || []
+      const mapped = items.map((c: any) => {
+        const staff = c.Staff || {}
+        const district = c.District || null
+        const province = c.Province_Name || (district && district.Province_Name) || ''
+        const fullName = [staff.First_Name, staff.Middle_Name, staff.Last_Name]
+          .filter(Boolean)
+          .join(' ')
+
+        return {
+          id: c.Coordinator_ID || staff.ID || '',
+          name: fullName,
+          email: staff.Email || '',
+          phone: staff.Phone_Number || '',
+          province,
+          district: formatDistrict(district)
+        }
+      })
+
+      setCoordinators(mapped)
+    } catch (err: any) {
+      setError(err.message || 'Unknown error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchCoordinators() }, [])
 
 
   return (
@@ -311,7 +376,10 @@ export default function CoordinatorManagement() {
           onSelectAll={handleSelectAll}
           onSelectCoordinator={handleSelectCoordinator}
           onActionClick={handleActionClick}
+          onUpdateCoordinator={handleUpdateCoordinator}
+          onDeleteCoordinator={handleDeleteCoordinator}
           searchQuery={searchQuery}
+          isAdmin={isAdmin}
         />
       </div>
 
@@ -321,6 +389,20 @@ export default function CoordinatorManagement() {
         isOpen={isAddModalOpen}
         onClose={handleModalClose}
         onSubmit={handleModalSubmit}
+      />
+      <DeleteCoordinatorModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => { setIsDeleteModalOpen(false); setDeletingCoordinator(null); }}
+        coordinatorId={deletingCoordinator?.id || null}
+        coordinatorName={deletingCoordinator?.name || null}
+        onConfirmDelete={async (id: string) => { await confirmDeleteCoordinator(id); setIsDeleteModalOpen(false); setDeletingCoordinator(null); }}
+      />
+      {/* Edit Coordinator Modal */}
+      <EditCoordinatorModal
+        isOpen={isEditModalOpen}
+        onClose={() => { setIsEditModalOpen(false); setEditingCoordinator(null); }}
+        coordinator={editingCoordinator}
+        onSaved={async () => { await fetchCoordinators(); setIsEditModalOpen(false); setEditingCoordinator(null); }}
       />
     </div>
   )
