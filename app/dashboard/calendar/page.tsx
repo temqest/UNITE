@@ -35,6 +35,8 @@ import { DatePicker } from '@heroui/date-picker';
 import { Avatar } from '@heroui/avatar';
 import EventViewModal from '@/components/calendar/event-view-modal';
 import EditEventModal from '@/components/calendar/event-edit-modal';
+import EventManageStaffModal from '@/components/calendar/event-manage-staff-modal';
+import EventRescheduleModal from '@/components/calendar/event-reschedule-modal';
 
 export default function CalendarPage() {
   const [activeView, setActiveView] = useState("week");
@@ -148,6 +150,60 @@ export default function CalendarPage() {
       return input as Record<string, any[]>;
     }
     return out;
+  };
+
+  // Merge month multi-day events into a week map for the given currentDate
+  const mergeWeekWithMonth = (normalizedWeek: Record<string, any[]>, normalizedMonth: Record<string, any[]>, currentDateParam: Date) => {
+    try {
+      const wkStart = new Date(currentDateParam);
+      const dayOfWeek = wkStart.getDay();
+      wkStart.setDate(wkStart.getDate() - dayOfWeek);
+      wkStart.setHours(0,0,0,0);
+      const wkEnd = new Date(wkStart);
+      wkEnd.setDate(wkStart.getDate() + 6);
+
+      const merged: Record<string, any[]> = {};
+      Object.keys(normalizedWeek || {}).forEach(k => { merged[k] = Array.isArray(normalizedWeek[k]) ? [...normalizedWeek[k]] : []; });
+
+      const addEventToDate = (localKey: string, ev: any) => {
+        if (!merged[localKey]) merged[localKey] = [];
+        const id = ev?.Event_ID ?? ev?.EventId ?? ev?._id ?? JSON.stringify(ev);
+        if (!merged[localKey].some(x => (x?.Event_ID ?? x?.EventId ?? x?._id ?? JSON.stringify(x)) === id)) {
+          merged[localKey].push(ev);
+        }
+      };
+
+      Object.keys(normalizedMonth || {}).forEach(k => {
+        const arr = normalizedMonth[k] || [];
+        for (const ev of arr) {
+          let start: Date | null = null;
+          let end: Date | null = null;
+          try {
+            if (ev.Start_Date) start = (typeof ev.Start_Date === 'string') ? new Date(ev.Start_Date) : (ev.Start_Date.$date ? new Date(ev.Start_Date.$date) : new Date(ev.Start_Date));
+          } catch (e) { start = null; }
+          try {
+            if (ev.End_Date) end = (typeof ev.End_Date === 'string') ? new Date(ev.End_Date) : (ev.End_Date.$date ? new Date(ev.End_Date.$date) : new Date(ev.End_Date));
+          } catch (e) { end = null; }
+
+          if (!start) continue;
+          if (!end) end = start;
+
+          const cur = new Date(start);
+          cur.setHours(0,0,0,0);
+          while (cur <= end) {
+            if (cur >= wkStart && cur <= wkEnd) {
+              const localKey = dateToLocalKey(new Date(cur));
+              addEventToDate(localKey, ev);
+            }
+            cur.setDate(cur.getDate() + 1);
+          }
+        }
+      });
+
+      return merged;
+    } catch (e) {
+      return normalizedWeek || {};
+    }
   };
 
   // Fetch real events from backend and populate week/month maps
@@ -1002,31 +1058,81 @@ export default function CalendarPage() {
       </div>
       {/* Event View & Edit Modals (reuse campaign components) */}
       <EventViewModal isOpen={viewModalOpen} onClose={() => { setViewModalOpen(false); setViewRequest(null); }} request={viewRequest} />
+      <EventManageStaffModal
+        isOpen={!!manageStaffOpenId}
+        eventId={manageStaffOpenId}
+        onClose={() => { setManageStaffOpenId(null); }}
+        onSaved={async () => {
+            // refresh calendar after saving staff (preserve multi-day events by merging month into week)
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            try {
+              const weekUrl = `${API_BASE}/api/calendar/week?date=${encodeURIComponent(currentDate.toISOString())}&status=Approved`;
+              const w = await fetch(weekUrl, { credentials: 'include' });
+              const wj = await w.json();
+              const normalizedWeek = normalizeEventsMap(wj?.data?.weekDays || {});
+
+              const monthUrl = `${API_BASE}/api/calendar/month?year=${year}&month=${month}&status=Approved`;
+              const m = await fetch(monthUrl, { credentials: 'include' });
+              const mj = await m.json();
+              const normalizedMonth = normalizeEventsMap(mj?.data?.eventsByDate || {});
+
+              // update both month and merged week maps
+              setMonthEventsByDate(normalizedMonth);
+              setWeekEventsByDate(mergeWeekWithMonth(normalizedWeek, normalizedMonth, currentDate));
+            } catch (e) { console.error(e); }
+        }}
+      />
+      <EventRescheduleModal
+        isOpen={!!rescheduleOpenId}
+        eventId={rescheduleOpenId}
+        onClose={() => { setRescheduleOpenId(null); }}
+        onSaved={async () => {
+            // refresh calendar after reschedule (preserve multi-day events by merging month into week)
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            try {
+              const weekUrl = `${API_BASE}/api/calendar/week?date=${encodeURIComponent(currentDate.toISOString())}&status=Approved`;
+              const w = await fetch(weekUrl, { credentials: 'include' });
+              const wj = await w.json();
+              const normalizedWeek = normalizeEventsMap(wj?.data?.weekDays || {});
+
+              const monthUrl = `${API_BASE}/api/calendar/month?year=${year}&month=${month}&status=Approved`;
+              const m = await fetch(monthUrl, { credentials: 'include' });
+              const mj = await m.json();
+              const normalizedMonth = normalizeEventsMap(mj?.data?.eventsByDate || {});
+
+              setMonthEventsByDate(normalizedMonth);
+              setWeekEventsByDate(mergeWeekWithMonth(normalizedWeek, normalizedMonth, currentDate));
+            } catch (e) { console.error(e); }
+        }}
+      />
       <EditEventModal
         isOpen={editModalOpen}
         onClose={() => { setEditModalOpen(false); setEditRequest(null); }}
         request={editRequest}
         onSaved={async () => {
-          // refresh calendar after edit
-          setViewModalOpen(false);
-          setEditModalOpen(false);
-          const year = currentDate.getFullYear();
-          const month = currentDate.getMonth() + 1;
-          try {
-            const weekUrl = `${API_BASE}/api/calendar/week?date=${encodeURIComponent(currentDate.toISOString())}&status=Approved`;
-            const w = await fetch(weekUrl, { credentials: 'include' });
-            const wj = await w.json();
-            // normalize the response the same way the main fetch does
-            setWeekEventsByDate(normalizeEventsMap(wj?.data?.weekDays || {}));
+            // refresh calendar after edit (preserve multi-day events by merging month into week)
+            setViewModalOpen(false);
+            setEditModalOpen(false);
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            try {
+              const weekUrl = `${API_BASE}/api/calendar/week?date=${encodeURIComponent(currentDate.toISOString())}&status=Approved`;
+              const w = await fetch(weekUrl, { credentials: 'include' });
+              const wj = await w.json();
+              const normalizedWeek = normalizeEventsMap(wj?.data?.weekDays || {});
 
-            const monthUrl = `${API_BASE}/api/calendar/month?year=${year}&month=${month}&status=Approved`;
-            const m = await fetch(monthUrl, { credentials: 'include' });
-            const mj = await m.json();
-            setMonthEventsByDate(normalizeEventsMap(mj?.data?.eventsByDate || {}));
-            // Note: we don't re-run the full merge logic here; the next automatic fetch (or user navigation) will reconcile multi-day events.
-          } catch (e) {
-            console.error(e);
-          }
+              const monthUrl = `${API_BASE}/api/calendar/month?year=${year}&month=${month}&status=Approved`;
+              const m = await fetch(monthUrl, { credentials: 'include' });
+              const mj = await m.json();
+              const normalizedMonth = normalizeEventsMap(mj?.data?.eventsByDate || {});
+
+              setMonthEventsByDate(normalizedMonth);
+              setWeekEventsByDate(mergeWeekWithMonth(normalizedWeek, normalizedMonth, currentDate));
+            } catch (e) {
+              console.error(e);
+            }
         }}
       />
     </div>
