@@ -255,11 +255,12 @@ interface CampaignCalendarProps {
                     {/* dots showing up to 3 events on this day */}
                     <div className="mt-1 flex items-center gap-1 h-3">
                         {dayEvents.slice(0,3).map((ev: any, i: number) => {
-                            const cat = (ev.Category || '').toString().toLowerCase();
+                            const cat = (ev.Category || ev.category || '').toString().toLowerCase();
                             let colorClass = 'bg-gray-400';
-                            if (cat === 'blood') colorClass = 'bg-red-500';
-                            else if (cat === 'advocacy') colorClass = 'bg-yellow-400';
-                            else if (cat === 'training') colorClass = 'bg-blue-500';
+                            // Support multiple category formats like 'BloodDrive', 'blood drive', 'blood'
+                            if (cat.includes('blood')) colorClass = 'bg-red-500';
+                            else if (cat.includes('advocacy')) colorClass = 'bg-yellow-400';
+                            else if (cat.includes('train')) colorClass = 'bg-blue-500';
                             return (
                                 <span key={i} title={ev.Title || ''} className={`w-2 h-2 rounded-full inline-block ${colorClass}`} />
                             );

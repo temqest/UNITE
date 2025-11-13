@@ -215,13 +215,20 @@ export const CreateTrainingEventModal: React.FC<CreateTrainingEventModalProps> =
               </label>
               {/* Coordinator selection: admin -> dropdown, coordinator/stakeholder -> locked input */}
               {(() => {
+                // determine user role robustly (handle different shapes/casing)
                 const rawUser = typeof window !== 'undefined' ? localStorage.getItem('unite_user') : null;
                 const user = rawUser ? JSON.parse(rawUser) : null;
-                const isAdmin = user && user.staff_type === 'Admin';
+                const isAdmin = !!(
+                  user && (
+                    (user.staff_type && String(user.staff_type).toLowerCase().includes('admin')) ||
+                    (user.role && String(user.role).toLowerCase().includes('admin'))
+                  )
+                );
 
                 if (isAdmin) {
-                    // If admin and there are no coordinator options, show a disabled message
-                    if ((coordinatorOptions.length || coordinators.length) === 0) {
+                    // If there are no coordinator options at all, show a disabled message
+                    const availableCount = (coordinatorOptions?.length || 0) + (coordinators?.length || 0);
+                    if (availableCount === 0) {
                       return (
                         <Input type="text" value={"No coordinators available"} disabled variant="bordered" classNames={{ inputWrapper: 'border-default-200 h-10 bg-default-100', input: 'text-sm' }} />
                       );
@@ -482,8 +489,14 @@ export const CreateBloodDriveEventModal: React.FC<CreateBloodDriveEventModalProp
         const headers: any = { "Content-Type": "application/json" };
         if (token) headers["Authorization"] = `Bearer ${token}`;
         const user = rawUser ? JSON.parse(rawUser) : null;
+        const isAdmin = !!(
+          user && (
+            (user.staff_type && String(user.staff_type).toLowerCase().includes('admin')) ||
+            (user.role && String(user.role).toLowerCase().includes('admin'))
+          )
+        );
 
-        if (user && user.staff_type === "Admin") {
+        if (isAdmin) {
           const res = await fetch(`${API_URL}/api/coordinators`, { headers });
           const body = await res.json();
           if (res.ok) {
@@ -596,16 +609,16 @@ export const CreateBloodDriveEventModal: React.FC<CreateBloodDriveEventModalProp
               {(() => {
                 const rawUser = typeof window !== 'undefined' ? localStorage.getItem('unite_user') : null;
                 const user = rawUser ? JSON.parse(rawUser) : null;
-                const isAdmin = user && user.staff_type === 'Admin';
+                const isAdmin = !!(
+                  user && (
+                    (user.staff_type && String(user.staff_type).toLowerCase().includes('admin')) ||
+                    (user.role && String(user.role).toLowerCase().includes('admin'))
+                  )
+                );
 
                 if (isAdmin) {
-                  if ((coordinatorOptions.length || coordinators.length) === 0) {
-                    return (
-                      <Input type="text" value={"No coordinators available"} disabled variant="bordered" classNames={{ inputWrapper: 'border-default-200 h-10 bg-default-100', input: 'text-sm' }} />
-                    );
-                  }
-
-                  if ((coordinatorOptions.length || coordinators.length) === 0) {
+                  const availableCount = (coordinatorOptions?.length || 0) + (coordinators?.length || 0);
+                  if (availableCount === 0) {
                     return (
                       <Input type="text" value={"No coordinators available"} disabled variant="bordered" classNames={{ inputWrapper: 'border-default-200 h-10 bg-default-100', input: 'text-sm' }} />
                     );
@@ -831,8 +844,14 @@ export const CreateAdvocacyEventModal: React.FC<CreateAdvocacyEventModalProps> =
         const headers: any = { "Content-Type": "application/json" };
         if (token) headers["Authorization"] = `Bearer ${token}`;
         const user = rawUser ? JSON.parse(rawUser) : null;
+        const isAdmin = !!(
+          user && (
+            (user.staff_type && String(user.staff_type).toLowerCase().includes('admin')) ||
+            (user.role && String(user.role).toLowerCase().includes('admin'))
+          )
+        );
 
-        if (user && user.staff_type === "Admin") {
+        if (isAdmin) {
           const res = await fetch(`${API_URL}/api/coordinators`, { headers });
           const body = await res.json();
           if (res.ok) {
@@ -953,9 +972,21 @@ export const CreateAdvocacyEventModal: React.FC<CreateAdvocacyEventModalProps> =
               {(() => {
                 const rawUser = typeof window !== 'undefined' ? localStorage.getItem('unite_user') : null;
                 const user = rawUser ? JSON.parse(rawUser) : null;
-                const isAdmin = user && user.staff_type === 'Admin';
+                const isAdmin = !!(
+                  user && (
+                    (user.staff_type && String(user.staff_type).toLowerCase().includes('admin')) ||
+                    (user.role && String(user.role).toLowerCase().includes('admin'))
+                  )
+                );
 
                 if (isAdmin) {
+                  const availableCount = (coordinatorOptions?.length || 0) + (coordinators?.length || 0);
+                  if (availableCount === 0) {
+                    return (
+                      <Input type="text" value={"No coordinators available"} disabled variant="bordered" classNames={{ inputWrapper: 'border-default-200 h-10 bg-default-100', input: 'text-sm' }} />
+                    );
+                  }
+
                   return (
                     <Select
                       placeholder="Select one"

@@ -172,26 +172,34 @@ export default function EditEventModal({ isOpen, onClose, request, onSaved }: Ed
           throw new Error('Coordinator is required to submit a change request.');
         }
 
-        const body = {
-          coordinatorId,
-          MadeByStakeholderID: stakeholderId,
-          Event_Title: title,
-          Location: location,
-          Email: email,
-          Phone_Number: contactNumber,
-          Event_Description: description,
-          // include category fields
-          ...(updateData.TrainingType ? { TrainingType: updateData.TrainingType } : {}),
-          ...(updateData.MaxParticipants ? { MaxParticipants: updateData.MaxParticipants } : {}),
-          ...(updateData.Target_Donation ? { Target_Donation: updateData.Target_Donation } : {}),
-          ...(updateData.TargetAudience ? { TargetAudience: updateData.TargetAudience } : {}),
-          ...(updateData.ExpectedAudienceSize ? { ExpectedAudienceSize: updateData.ExpectedAudienceSize } : {}),
-          // include time updates (computed ISO strings) so stakeholder change request reflects new times
-          ...(updateData.Start_Date ? { Start_Date: updateData.Start_Date } : {}),
-          ...(updateData.End_Date ? { End_Date: updateData.End_Date } : {}),
-        };
+        // Ensure Start_Date/End_Date are present in the payload. The server requires Start_Date for validation
+        // so when stakeholder does not change the date/time we must include the original event dates.
+        let payloadStartDate: string | undefined = undefined;
+        let payloadEndDate: string | undefined = undefined;
+        try {
+          if (updateData.Start_Date) payloadStartDate = updateData.Start_Date;
+          else if (request.event?.Start_Date) payloadStartDate = new Date(request.event.Start_Date).toISOString();
+        } catch (e) {
+          // leave undefined if parsing fails
+        }
+        try {
+          if (updateData.End_Date) payloadEndDate = updateData.End_Date;
+          else if (request.event?.End_Date) payloadEndDate = new Date(request.event.End_Date).toISOString();
+        } catch (e) {
+          // leave undefined if parsing fails
+        }
 
-        const res = await fetch(`${API_URL}/api/requests`, { method: 'POST', headers, body: JSON.stringify(body) });
+        // For stakeholders, update the existing request via PUT so we don't create a new request
+        const body: any = {
+          ...updateData,
+          MadeByStakeholderID: stakeholderId
+        };
+        // include times/date if present
+        if (payloadStartDate) body.Start_Date = payloadStartDate;
+        if (payloadEndDate) body.End_Date = payloadEndDate;
+
+        // PUT to update existing request
+        const res = await fetch(`${API_URL}/api/requests/${requestId}`, { method: 'PUT', headers, body: JSON.stringify(body) });
         const resp = await res.json();
         if (!res.ok) {
           if (resp && resp.errors && Array.isArray(resp.errors)) {

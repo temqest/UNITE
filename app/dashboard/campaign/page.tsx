@@ -40,6 +40,7 @@ export default function CampaignPage() {
   const [errorModalOpen, setErrorModalOpen] = useState(false);
   const [errorModalMessage, setErrorModalMessage] = useState("");
   const [requests, setRequests] = useState<any[]>([]);
+  const [publicEvents, setPublicEvents] = useState<any[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
   const [requestsError, setRequestsError] = useState("");
   const [viewModalOpen, setViewModalOpen] = useState(false);
@@ -56,46 +57,36 @@ export default function CampaignPage() {
     setRequestsError("");
 
     try {
-      const rawUser = localStorage.getItem("unite_user");
       const token = localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token");
       const headers: any = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      let url = "";
-      if (!rawUser) {
-        // no user found - fallback to fetching pending for admin view
-        url = `${API_URL}/api/requests/pending`;
-      } else {
-        const user = JSON.parse(rawUser);
-        // Staff (system admin or coordinator) -> user.staff_type
-        if (user.staff_type) {
-          if (user.staff_type === "Admin") {
-            url = `${API_URL}/api/requests/all`;
-          } else if (user.staff_type === "Coordinator") {
-            // coordinator id should be user.id
-            url = `${API_URL}/api/requests/coordinator/${user.id}`;
-          } else {
-            // other staff types - default to coordinator scoped
-            url = `${API_URL}/api/requests/coordinator/${user.id}`;
-          }
-        } else if (user.Stakeholder_ID || user.StakeholderId || user.id) {
-          // Stakeholder object from backend may have Stakeholder_ID
-          const stakeholderId = user.Stakeholder_ID || user.StakeholderId || user.id;
-          url = `${API_URL}/api/requests/stakeholder/${stakeholderId}`;
-        } else {
-          // fallback
-          url = `${API_URL}/api/requests/pending`;
-        }
+      // Build query params for server-side filtering
+      const params = new URLSearchParams();
+      params.set('page', String(currentPage));
+      params.set('limit', String(pageSize));
+      if (searchQuery && searchQuery.trim()) params.set('search', searchQuery.trim());
+      if (selectedTab && selectedTab !== 'all') {
+        // map UI tabs to server status values
+        if (selectedTab === 'approved') params.set('status', 'Completed');
+        else if (selectedTab === 'pending') params.set('status', 'Pending_Admin_Review');
+        else if (selectedTab === 'rejected') params.set('status', 'Rejected');
       }
+      if (advancedFilter && advancedFilter.start) params.set('date_from', advancedFilter.start);
+      if (advancedFilter && advancedFilter.end) params.set('date_to', advancedFilter.end);
+      if (advancedFilter && advancedFilter.coordinator) params.set('coordinator', advancedFilter.coordinator);
+      if (quickFilterCategory) params.set('category', quickFilterCategory);
 
+      const url = `${API_URL}/api/requests/me?${params.toString()}`;
       const res = await fetch(url, { headers });
       const body = await res.json();
       if (!res.ok) throw new Error(body.message || 'Failed to fetch requests');
 
       // body.data is array of requests (controllers return { success, data, pagination })
       const data = body.data || [];
-
       setRequests(Array.isArray(data) ? data : []);
+      // if server returned pagination, update UI page data (optional)
+      // You can store pagination in state if needed (not implemented here)
     } catch (err: any) {
       console.error('Fetch requests error', err);
       setRequestsError(err.message || 'Failed to fetch requests');
@@ -109,6 +100,27 @@ export default function CampaignPage() {
   useEffect(() => {
     // load requests and also initialize the displayed user name/email for the topbar
     fetchRequests();
+    // fetch published events for the calendar
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/public/events`);
+        const body = await res.json();
+        if (res.ok && Array.isArray(body.data)) {
+          // map to calendar format used by CampaignCalendar
+          const list = body.data.map((e: any) => ({
+            Event_ID: e.Event_ID,
+            Title: e.Title,
+            Start_Date: e.Start_Date,
+            Category: e.Category
+          }));
+          // setRequests already used for cards; keep approved events in a separate state
+          // Store public events in React state for the calendar
+          setPublicEvents(list);
+        }
+      } catch (e) {
+        // ignore calendar load failures
+      }
+    })();
     try {
       const info = getUserInfo()
       try { console.debug('[Campaign] getUserInfo:', info) } catch (e) {}
@@ -124,6 +136,19 @@ export default function CampaignPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, selectedTab, quickFilterCategory, JSON.stringify(advancedFilter)]);
+
+  // Re-fetch requests whenever filters or pagination change
+  useEffect(() => {
+    // fetchRequests is defined above in the component scope
+    (async () => {
+      try {
+        await fetchRequests();
+      } catch (e) {
+        // errors handled inside fetchRequests
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, selectedTab, searchQuery, quickFilterCategory, JSON.stringify(advancedFilter)]);
   
   // Sample event data
   const events = [
@@ -221,9 +246,9 @@ export default function CampaignPage() {
   // Handler for create event - maps modal data to backend payloads and posts
   const handleCreateEvent = async (eventType: string, data: any) => {
     try {
-      const rawUser = localStorage.getItem("unite_user");
-      const user = rawUser ? JSON.parse(rawUser) : null;
-      const token = localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token");
+  const rawUser = localStorage.getItem("unite_user");
+  const user = rawUser ? JSON.parse(rawUser) : null;
+  const token = localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token");
       const headers: any = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -233,6 +258,8 @@ export default function CampaignPage() {
         Location: data.location || '',
         Start_Date: data.startTime || (data.date ? new Date(data.date).toISOString() : undefined),
         End_Date: data.endTime || undefined,
+        // Include description when provided (frontend modals use eventDescription)
+        Event_Description: data.eventDescription || data.Event_Description || data.description || undefined,
         Email: data.email || undefined,
         Phone_Number: data.contactNumber || undefined,
         categoryType: eventType === 'blood-drive' ? 'BloodDrive' : (eventType === 'training' ? 'Training' : 'Advocacy')
@@ -258,12 +285,20 @@ export default function CampaignPage() {
         eventPayload.MadeByCoordinatorID = data.coordinator;
       }
 
-      // Decide endpoint based on user role
-      if (user && (user.staff_type === 'Admin' || user.staff_type === 'Coordinator')) {
+      // Decide endpoint based on user role. Use getUserInfo helper for robust detection.
+      const info = getUserInfo();
+      const roleStr = String(info.role || user?.staff_type || user?.role || '').toLowerCase();
+      const isAdmin = !!(info.isAdmin || roleStr.includes('admin'));
+      const isCoordinator = !!roleStr.includes('coordinator');
+
+      if (isAdmin || isCoordinator) {
         // Admin/Coordinator -> immediate publish endpoint
+        const creatorId = user?.Admin_ID || user?.Coordinator_ID || user?.id || user?.ID || null;
+        const creatorRole = info.role || user?.staff_type || user?.role || (isAdmin ? 'Admin' : (isCoordinator ? 'Coordinator' : null));
+
         const body = {
-          creatorId: user.id,
-          creatorRole: user.staff_type,
+          creatorId,
+          creatorRole,
           ...eventPayload
         };
 
@@ -421,89 +456,12 @@ export default function CampaignPage() {
     }
   };
 
-  const filteredRequests = useMemo(() => {
-    return requests.filter((req) => {
-      const event = req.event || {};
-      // status filter from tabs
-      const statusRaw = (event.Status || req.Status || 'Pending').toString();
-      const status = statusRaw.includes('Reject') ? 'Rejected' : (statusRaw.includes('Approved') ? 'Approved' : 'Pending');
-      if (selectedTab === 'approved' && status !== 'Approved') return false;
-      if (selectedTab === 'pending' && status !== 'Pending') return false;
-      if (selectedTab === 'rejected' && status !== 'Rejected') return false;
-
-      // quick filter category
-      const rawCategory = (event.Category || event.categoryType || event.category || 'Event');
-      const catKey = String(rawCategory || '').toLowerCase();
-      let categoryLabel = 'Event';
-      if (catKey.includes('blood')) categoryLabel = 'Blood Drive';
-      else if (catKey.includes('training')) categoryLabel = 'Training';
-      else if (catKey.includes('advocacy')) categoryLabel = 'Advocacy';
-      if (quickFilterCategory && quickFilterCategory !== '' && quickFilterCategory !== categoryLabel) return false;
-
-      // advanced filter: date range
-      // advanced filter: only start date (events on/after the chosen date)
-      if (advancedFilter.start) {
-        const startDate = event.Start_Date ? new Date(event.Start_Date) : undefined;
-        if (startDate) {
-          const s = new Date(advancedFilter.start);
-          if (startDate < s) return false;
-        }
-      }
-
-      // search filter across title, location, category, coordinator name
-      if (searchQuery && searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase();
-        const title = (event.Event_Title || event.title || '').toString().toLowerCase();
-        const location = (event.Location || event.location || '').toString().toLowerCase();
-        const category = categoryLabel.toLowerCase();
-        let coordinatorName = '';
-        if (req.coordinator && req.coordinator.staff) {
-          const s = req.coordinator.staff;
-          coordinatorName = `${s.First_Name || ''} ${s.Last_Name || ''}`.trim().toLowerCase();
-        }
-        if (!(title.includes(q) || location.includes(q) || category.includes(q) || coordinatorName.includes(q))) return false;
-      }
-
-      // advanced filter coordinator name
-      if (advancedFilter.coordinator && advancedFilter.coordinator.trim()) {
-        const coordQ = advancedFilter.coordinator.trim().toLowerCase();
-        let coordinatorName = '';
-        if (req.coordinator && req.coordinator.staff) {
-          const s = req.coordinator.staff;
-          coordinatorName = `${s.First_Name || ''} ${s.Last_Name || ''}`.trim().toLowerCase();
-        }
-        if (!coordinatorName.includes(coordQ)) return false;
-      }
-
-      return true;
-    });
-  }, [requests, selectedTab, searchQuery, quickFilterCategory, advancedFilter]);
+  // Since filtering/pagination is moved server-side, `requests` is already filtered
+  const filteredRequests = requests;
 
   // derive approved events for the calendar (only events with Approved status)
-  const approvedEvents = useMemo(() => {
-    return requests
-      .map((req) => ({ req, event: req.event || {} }))
-      .filter(({ req, event }) => {
-        const statusRaw = (event.Status || req.Status || '').toString();
-        const status = statusRaw.includes('Reject') ? 'Rejected' : (statusRaw.includes('Approve') ? 'Approved' : 'Pending');
-        return status === 'Approved';
-      })
-      .map(({ event, req }) => {
-        const rawCategory = (event.Category || event.categoryType || event.category || '').toString().toLowerCase();
-        let categoryKey = 'other';
-        if (rawCategory.includes('blood')) categoryKey = 'blood';
-        else if (rawCategory.includes('training')) categoryKey = 'training';
-        else if (rawCategory.includes('advocacy')) categoryKey = 'advocacy';
-
-        return {
-          Request_ID: req.Request_ID || req.RequestId || req._id || req.RequestId,
-          Event_ID: event.Event_ID || event._id || event.EventId,
-          Start_Date: event.Start_Date || event.start || event.date,
-          Title: event.Event_Title || event.title || '',
-          Category: categoryKey
-        };
-      });
-  }, [requests]);
+  // approved events are loaded from public API into React state by fetch effect above
+  const approvedEvents = publicEvents || [];
   
   return (
     <div className="min-h-screen bg-white">
@@ -540,18 +498,15 @@ export default function CampaignPage() {
         />
 
         {/* Event / Request Cards Section - Scrollable */}
-        <div className="flex-1 h-[calc(106vh-300px)] overflow-y-auto pr-2">
-          <div className="grid grid-cols-2 gap-4 h-full">
-                {isLoadingRequests && <div>Loading requests...</div>}
-                {requestsError && <div className="text-sm text-danger">{requestsError}</div>}
+        <div className="flex-1 h-[calc(106vh-300px)] pr-2 relative">
+          {/* Scrollable content is nested so overlay can be absolutely positioned and centered
+              relative to this wrapper (keeps overlay fixed in the visible viewport while
+              the inner content scrolls). */}
+          <div className="overflow-y-auto h-full">
+            <div className="grid grid-cols-2 gap-4 h-full">
+                {requestsError && <div className="col-span-2 text-sm text-danger">{requestsError}</div>}
 
                 {/* Quick/Advanced filters are shown via toolbar dropdowns */}
-
-            {!isLoadingRequests && requests.length === 0 && (
-              <div className="col-span-2 flex items-center justify-center py-16">
-                <div className="text-sm text-default-600">No request found</div>
-              </div>
-            )}
 
             {(() => {
               const total = filteredRequests.length;
@@ -659,7 +614,25 @@ export default function CampaignPage() {
               );
             });
           })()}
+            </div>
           </div>
+
+          {/* Overlay area positioned relative to wrapper. This keeps spinner / no-results
+              centered in the visible viewport regardless of inner scroll position. */}
+          {isLoadingRequests && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-20 pointer-events-none">
+              <svg className="animate-spin h-12 w-12 text-default-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+            </div>
+          )}
+
+          {!isLoadingRequests && requests.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+              <div className="text-sm text-default-600">No request found</div>
+            </div>
+          )}
         </div>
       </div>
       {/* Error Modal for user-friendly messages */}
