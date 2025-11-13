@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@heroui/button";
 import {
     Calendar,
@@ -15,6 +15,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Popover, PopoverTrigger, PopoverContent } from "@heroui/popover";
 import { getUserInfo } from "../utils/getUserInfo"
 import { debug } from '@/utils/devLogger'
+import { fetchJsonWithAuth } from '../utils/fetchWithAuth';
     
 interface SidebarProps {
     role?: string;
@@ -255,7 +256,33 @@ export default function Sidebar({ role, userInfo, initialShowCoordinator, initia
         { href: "/dashboard/coordinator-management", icon: UsersRound, key: "coordinator", visible: showCoordinatorLink },
     ];
     
-    const bottomLinks = [{ href: "/notifications", icon: Bell }];
+    const bottomLinks = [{ href: "/dashboard/notification", icon: Bell }];
+    const [unreadCount, setUnreadCount] = useState<number | null>(null);
+
+    const loadUnreadCount = useCallback(async () => {
+        try {
+            const stored = getUserInfo();
+            const parsed = stored.raw || null;
+            const recipientId = parsed?.Coordinator_ID || parsed?.CoordinatorId || parsed?.id || parsed?.ID || parsed?.user_id || null;
+            const recipientType = stored.isAdmin ? 'Admin' : ((stored.role || '').toLowerCase().includes('coordinator') ? 'Coordinator' : 'Coordinator');
+            if (!recipientId || !recipientType) return;
+            const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
+            const params = new URLSearchParams({ recipientId: String(recipientId), recipientType });
+            const url = base ? `${base}/api/notifications/unread-count?${params.toString()}` : `/api/notifications/unread-count?${params.toString()}`;
+            const body: any = await fetchJsonWithAuth(url);
+            const count = (body?.data && body.data.unread_count) || body?.unread_count || 0;
+            setUnreadCount(Number(count));
+        } catch (e) {
+            // ignore failures silently
+        }
+    }, []);
+
+    useEffect(() => {
+        loadUnreadCount();
+        // optional: refresh count every 30s
+        const id = setInterval(() => loadUnreadCount(), 30000);
+        return () => clearInterval(id);
+    }, [loadUnreadCount]);
     
     const renderButton = (href: string, Icon: any, key: string, visible = true) => {
         const isActive = pathname === href;
@@ -312,9 +339,52 @@ export default function Sidebar({ role, userInfo, initialShowCoordinator, initia
     
         {/* Bottom section */}
         <div className="flex flex-col items-center space-y-4">
-            {bottomLinks.map(({ href, icon }) =>
-            renderButton(href, icon, `bottom-${href}`)
-            )}
+            {bottomLinks.map(({ href, icon }) => {
+            // render unread badge for notifications link
+            if (href === '/dashboard/notification') {
+                // render custom button so we can show badge
+                const isActive = pathname === href;
+                const hiddenClasses = "";
+                return (
+                    <Link
+                        href={href}
+                        key={`bottom-${href}`}
+                        aria-hidden={'false'}
+                        tabIndex={0}
+                        className={`relative w-10 h-10 inline-flex items-center justify-center rounded-full transition-colors duration-200 ${
+                            isActive ? "bg-danger text-white" : "text-black border border-gray-300 hover:bg-gray-100"
+                        }`}
+                    >
+                        {(() => {
+                            const Icon = icon as any;
+                            return <Icon size={16} strokeWidth={2} className="-translate-y-[0.5px]" />
+                        })()}
+                        {(() => {
+                            // No badge when explicitly zero: show just a faint outline circle
+                            if (!unreadCount || unreadCount === 0) {
+                                return (
+                                    <span aria-hidden="true" className="absolute -top-1 -right-1 inline-block w-3 h-3 rounded-full border border-default-300 bg-transparent" />
+                                );
+                            }
+
+                            // When active, invert colors: bell container becomes red (handled by link classes)
+                            // Show white badge with red text when active, otherwise red badge with white text
+                            const display = unreadCount > 99 ? '99+' : String(unreadCount);
+                            if (isActive) {
+                                return (
+                                    <span aria-label={`${unreadCount} unread notifications`} title={`${unreadCount} unread`} className="absolute -top-1 -right-1 inline-flex items-center justify-center w-6 h-6 text-[11px] font-semibold leading-none text-red-500 bg-white rounded-full border-2 border-red-500 shadow">{display}</span>
+                                );
+                            }
+
+                            return (
+                                <span aria-label={`${unreadCount} unread notifications`} title={`${unreadCount} unread`} className="absolute -top-1 -right-1 inline-flex items-center justify-center w-6 h-6 text-[11px] font-semibold leading-none text-white bg-danger rounded-full border-2 border-white shadow">{display}</span>
+                            );
+                        })()}
+                    </Link>
+                )
+            }
+            return renderButton(href, icon, `bottom-${href}`)
+            })}
             <Popover placement="right">
             <PopoverTrigger>
                 {/* Native button here keeps attributes stable between SSR and CSR */}
