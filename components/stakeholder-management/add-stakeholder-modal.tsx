@@ -7,6 +7,7 @@ import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from "@herou
 import { Button } from "@heroui/button"
 import { Input } from "@heroui/input"
 import { Select, SelectItem } from "@heroui/select"
+import { getUserInfo } from '@/utils/getUserInfo'
 
 
 interface AddStakeholderModalProps {
@@ -169,11 +170,87 @@ export default function AddStakeholderModal({
 
   // If the user is not a sys admin and a userDistrictId is provided, lock selection to that id
   useEffect(() => {
+    // Primary path: parent passed the district id
     if (!isSysAdmin && userDistrictId) {
-      // If districts already loaded, set province too
-      setSelectedDistrictId(userDistrictId)
+      setSelectedDistrictId(String(userDistrictId))
       const d = districts.find((x) => String(x.District_ID) === String(userDistrictId))
       if (d) setSelectedProvince(d.Province_Name || '')
+      return
+    }
+
+    // Fallback: if parent didn't provide a district id, attempt to compute it here
+    if (!isSysAdmin && !userDistrictId) {
+      let uid: any = null
+      let parsed: any = null
+      let info: any = null
+      try {
+        info = getUserInfo()
+        if (info && info.raw) {
+          const r = info.raw
+          uid = r?.District_ID || r?.DistrictId || r?.districtId || r?.district_id || (r?.role_data && (r.role_data.district_id || r.role_data.districtId || r.role_data.district)) || null
+        }
+      } catch (e) { /* ignore */ }
+
+      if (!uid) {
+        try {
+          const raw = localStorage.getItem('unite_user') || sessionStorage.getItem('unite_user')
+          // Debug raw stored user (truncate to avoid huge logs) to help diagnose shape
+          try { console.log('[AddStakeholderModal] raw unite_user (truncated):', raw ? String(raw).slice(0, 300) : null) } catch (e) { }
+          parsed = raw ? JSON.parse(raw) : null
+        } catch (e) { parsed = null }
+
+        const p = parsed || {}
+        uid = p?.District_ID || p?.DistrictId || p?.districtId || p?.district_id || (p?.role_data && (p.role_data.district_id || p.role_data.districtId || p.role_data.district)) || (p?.user && (p.user.District_ID || p.user.DistrictId || p.user.districtId || p.user.district_id)) || null
+
+        // If still no district id, try fetching the coordinator/stakeholder record from backend
+        if (!uid) {
+          const infoId = info?.raw?.id || info?.raw?.ID || parsed?.id || parsed?.ID || null
+          if (infoId) {
+            ;(async () => {
+              try {
+                const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '')
+                // If the user is a Coordinator, the correct endpoint is /api/coordinators/:id
+                const isCoordinatorId = String(infoId).toLowerCase().startsWith('coord_') || String(info?.raw?.role || '').toLowerCase().includes('coordinator')
+                const url = base
+                  ? (isCoordinatorId ? `${base}/api/coordinators/${encodeURIComponent(infoId)}` : `${base}/api/stakeholders/${encodeURIComponent(infoId)}`)
+                  : (isCoordinatorId ? `/api/coordinators/${encodeURIComponent(infoId)}` : `/api/stakeholders/${encodeURIComponent(infoId)}`)
+                let token = null
+                try { token = localStorage.getItem('unite_token') || sessionStorage.getItem('unite_token') } catch (e) { token = null }
+                const headers: any = {}
+                if (token) headers['Authorization'] = `Bearer ${token}`
+                const res = await fetch(url, { headers })
+                const txt = await res.text()
+                let j: any = null
+                try { j = txt ? JSON.parse(txt) : null } catch (e) { j = null }
+                const rec = j?.data || j?.stakeholder || j || null
+                if (rec) {
+                  const foundUid = rec?.District_ID || rec?.district_id || rec?.DistrictId || (rec?.role_data && (rec.role_data.district_id || rec.role_data.districtId || rec.role_data.district)) || (rec?.District && (rec.District.District_ID || rec.District.DistrictId)) || null
+                  if (foundUid) {
+                    uid = foundUid
+                    const d = districts.find((x) => String(x.District_ID) === String(uid))
+                    if (d) setSelectedProvince(d.Province_Name || '')
+                    setSelectedDistrictId(String(uid))
+                  }
+                }
+              } catch (e) {
+                // ignore network errors here
+              }
+            })()
+          }
+        }
+      }
+
+      if (uid) {
+        setSelectedDistrictId(String(uid))
+        const d = districts.find((x) => String(x.District_ID) === String(uid))
+        if (d) setSelectedProvince(d.Province_Name || '')
+      }
+
+      // Debug: show what we found locally so you can paste this to me if still wrong
+      try {
+        // eslint-disable-next-line no-console
+        console.log('[AddStakeholderModal] fallback debug:', { isOpen, isSysAdmin, userDistrictId, computed: uid, getUserInfo: info, parsedLocal: parsed })
+      } catch (e) { }
     }
   }, [isSysAdmin, userDistrictId, districts])
 
@@ -423,10 +500,10 @@ export default function AddStakeholderModal({
                     variant="bordered"
                     radius="md"
                     size="md"
-                    selectedKeys={selectedDistrictId ? [selectedDistrictId] : []}
+                    selectedKeys={selectedDistrictId ? new Set([String(selectedDistrictId)]) : new Set()}
                     onSelectionChange={(keys: any) => {
                       const id = Array.from(keys)[0] as string
-                      setSelectedDistrictId(id)
+                      setSelectedDistrictId(String(id))
                       const d = districts.find((x) => String(x.District_ID) === String(id))
                       if (d) setSelectedProvince(d.Province_Name || '')
                     }}
@@ -436,7 +513,7 @@ export default function AddStakeholderModal({
                     }}
                   >
                     {districts.map((district) => (
-                      <SelectItem key={district.District_ID}>
+                      <SelectItem key={String(district.District_ID)}>
                         {district.District_Name || district.District_Number || district.District_ID}
                       </SelectItem>
                     ))}

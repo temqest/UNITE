@@ -52,6 +52,9 @@ export default function StakeholderManagement() {
     const [districtsMap, setDistrictsMap] = useState<Record<string, any> | null>(null)
 	const [districtsList, setDistrictsList] = useState<any[]>([])
 	const [userDistrictId, setUserDistrictId] = useState<string | null>(null)
+	// userDistrictId that is explicitly passed when opening the Add modal so
+	// modal receives the computed value immediately (avoids React state async race)
+	const [openUserDistrictId, setOpenUserDistrictId] = useState<string | null>(null)
 
 		// Do not call getUserInfo() synchronously — read it on mount so server and client
 		// produce the same initial HTML; update user-derived state after hydration.
@@ -70,7 +73,9 @@ export default function StakeholderManagement() {
 				const resolvedRole = info?.role || null
 				const roleLower = resolvedRole ? String(resolvedRole).toLowerCase() : ''
 				const isSystemAdmin = !!info?.isAdmin || (roleLower.includes('sys') && roleLower.includes('admin'))
-				setCanManageStakeholders(!!(isStaffAdmin && (isSystemAdmin || roleLower === 'admin')))
+				// Allow management when the user is a system admin OR has StaffType 'admin'.
+				// Previous logic required both which could incorrectly block sys-admin users.
+				setCanManageStakeholders(!!(isSystemAdmin || isStaffAdmin || roleLower === 'admin'))
 				setDisplayName(info?.displayName || 'Bicol Medical Center')
 				setDisplayEmail(info?.email || 'bmc@gmail.com')
 				// determine logged-in user's district id (if any)
@@ -148,47 +153,54 @@ export default function StakeholderManagement() {
 		try {
 			let uid: any = null
 			let parsed: any = null
+			// First, use getUserInfo() which centralizes parsing logic
 			try {
-				const raw = localStorage.getItem('unite_user')
-				parsed = raw ? JSON.parse(raw) : null
-			} catch (e) { parsed = null }
+				const info = getUserInfo()
+				if (info && info.raw) {
+					const r = info.raw
+					uid = r?.District_ID || r?.DistrictId || r?.districtId || r?.district_id || null
+				}
+			} catch (e) { /* ignore */ }
 
-			// helper to check multiple likely locations
-			const searchPaths = [
-				parsed,
-				parsed?.user,
-				parsed?.data,
-				parsed?.staff,
-				parsed?.profile,
-				parsed?.User,
-				parsed?.result,
-				parsed?.userInfo,
-			]
+			// If still not found, try reading from localStorage / sessionStorage variants
+			if (!uid) {
+				try {
+					const raw = localStorage.getItem('unite_user') || sessionStorage.getItem('unite_user')
+					parsed = raw ? JSON.parse(raw) : null
+				} catch (e) { parsed = null }
 
-			for (const p of searchPaths) {
-				if (!p) continue
-				// Common variants: District_ID, DistrictId, districtId, district_id
-				if (p.District_ID) { uid = p.District_ID; break }
-				if (p.DistrictId) { uid = p.DistrictId; break }
-				if (p.districtId) { uid = p.districtId; break }
-				if (p.district_id) { uid = p.district_id; break }
-				if (p.District && (p.District.District_ID || p.District.DistrictId || p.District.districtId || p.District.district_id)) { uid = p.District.District_ID || p.District.DistrictId || p.District.districtId || p.District.district_id; break }
-				if (p.district && (p.district.District_ID || p.district.DistrictId || p.district.districtId || p.district.district_id)) { uid = p.district.District_ID || p.district.DistrictId || p.district.districtId || p.district.district_id; break }
-				// role_data is used in some payloads (see user's debug output)
-				if (p.role_data && (p.role_data.district_id || p.role_data.districtId || p.role_data.district)) { uid = p.role_data.district_id || p.role_data.districtId || p.role_data.district; break }
-				// some payloads include a nested user object
-				if (p.user && (p.user.District_ID || p.user.DistrictId || p.user.districtId || p.user.district_id)) { uid = p.user.District_ID || p.user.DistrictId || p.user.districtId || p.user.district_id; break }
+				const searchPaths = [
+					parsed,
+					parsed?.user,
+					parsed?.data,
+					parsed?.staff,
+					parsed?.profile,
+					parsed?.User,
+					parsed?.result,
+					parsed?.userInfo,
+				]
+
+				for (const p of searchPaths) {
+					if (!p) continue
+					if (p.District_ID) { uid = p.District_ID; break }
+					if (p.DistrictId) { uid = p.DistrictId; break }
+					if (p.districtId) { uid = p.districtId; break }
+					if (p.district_id) { uid = p.district_id; break }
+					if (p.District && (p.District.District_ID || p.District.DistrictId || p.District.districtId || p.District.district_id)) { uid = p.District.District_ID || p.District.DistrictId || p.District.districtId || p.District.district_id; break }
+					if (p.district && (p.district.District_ID || p.district.DistrictId || p.district.districtId || p.district.district_id)) { uid = p.district.District_ID || p.district.DistrictId || p.district.districtId || p.district.district_id; break }
+					if (p.role_data && (p.role_data.district_id || p.role_data.districtId || p.role_data.district)) { uid = p.role_data.district_id || p.role_data.districtId || p.role_data.district; break }
+					if (p.user && (p.user.District_ID || p.user.DistrictId || p.user.districtId || p.user.district_id)) { uid = p.user.District_ID || p.user.DistrictId || p.user.districtId || p.user.district_id; break }
+				}
 			}
 
-			// fallback to previously set userInfo raw
-			if (!uid && userInfo?.raw) {
-				const r = userInfo.raw
-				uid = r?.District_ID || r?.DistrictId || r?.districtId || (r?.District && (r.District.District_ID || r.District.DistrictId)) || null
-			}
-
-				setUserDistrictId(uid || null)
-				debug('[StakeholderManagement] handleAddStakeholder parsed user object:', parsed)
-				debug('[StakeholderManagement] handleAddStakeholder computed userDistrictId:', uid)
+			setUserDistrictId(uid || null)
+			setOpenUserDistrictId(uid || null)
+			// Include both centralized getUserInfo and raw parsed object for diagnostics
+			let infoForDebug = null
+			try { infoForDebug = getUserInfo() } catch (e) { infoForDebug = null }
+			debug('[StakeholderManagement] handleAddStakeholder getUserInfo():', infoForDebug)
+			debug('[StakeholderManagement] handleAddStakeholder parsed fallback object:', parsed)
+			debug('[StakeholderManagement] handleAddStakeholder computed userDistrictId:', uid)
 		} catch (e) {
 			// ignore
 		}
@@ -198,6 +210,7 @@ export default function StakeholderManagement() {
 
 	const handleModalClose = () => {
 		setIsAddModalOpen(false)
+		setOpenUserDistrictId(null)
 	}
 
 	const [isGenerateCodeOpen, setIsGenerateCodeOpen] = useState(false)
@@ -707,7 +720,7 @@ export default function StakeholderManagement() {
 				onClose={handleModalClose}
 				onSubmit={handleModalSubmit}
 				isSysAdmin={canManageStakeholders}
-				userDistrictId={userDistrictId}
+				userDistrictId={openUserDistrictId ?? userDistrictId}
 				districtsProp={districtsList}
 				isSubmitting={isCreating}
 				modalError={modalError}
