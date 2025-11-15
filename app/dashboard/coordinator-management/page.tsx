@@ -59,7 +59,12 @@ export default function CoordinatorManagement() {
       const resolvedRole = info?.role || null
       const roleLower = resolvedRole ? String(resolvedRole).toLowerCase() : ''
       const isSystemAdmin = !!info?.isAdmin || (roleLower.includes('sys') && roleLower.includes('admin'))
-      setCanManageCoordinators(!!(isStaffAdmin && (isSystemAdmin || roleLower === 'admin')))
+      // Allow management when the user is a system administrator OR when they
+      // are staff-type 'Admin' with explicit admin role. Previously this
+      // required both (system admin && staff admin) which could hide actions
+      // for legitimate system administrators. Relax the rule so system
+      // administrators can manage coordinators even if StaffType isn't set.
+      setCanManageCoordinators(Boolean(isSystemAdmin || (isStaffAdmin && roleLower === 'admin')))
       setDisplayName(info?.displayName || 'Bicol Medical Center')
       setDisplayEmail(info?.email || 'bmc@gmail.com')
     } catch (e) { /* ignore */ }

@@ -267,9 +267,27 @@ export default function Sidebar({ role, userInfo, initialShowCoordinator, initia
         try {
             const stored = getUserInfo();
             const parsed = stored.raw || null;
-            const recipientId = parsed?.Coordinator_ID || parsed?.CoordinatorId || parsed?.id || parsed?.ID || parsed?.user_id || null;
-            const recipientType = stored.isAdmin ? 'Admin' : ((stored.role || '').toLowerCase().includes('coordinator') ? 'Coordinator' : 'Coordinator');
-            if (!recipientId || !recipientType) return;
+            // Try many common shapes for recipient id (coordinator, stakeholder, generic id)
+            let recipientId: string | null = null;
+            if (parsed) {
+                recipientId = parsed?.Coordinator_ID || parsed?.CoordinatorId || parsed?.coordinator_id || parsed?.coordinatorId ||
+                              parsed?.Stakeholder_ID || parsed?.StakeholderId || parsed?.stakeholder_id || parsed?.stakeholderId ||
+                              parsed?.id || parsed?.ID || parsed?.user_id || parsed?.user?.id || null;
+            }
+
+            // Determine recipient type: Admin, Coordinator, or Stakeholder
+            let recipientType = 'Coordinator';
+            if (stored.isAdmin) {
+                recipientType = 'Admin';
+            } else if (parsed) {
+                const roleLower = (stored.role || '').toLowerCase();
+                const hasStakeholderId = !!(parsed?.Stakeholder_ID || parsed?.StakeholderId || parsed?.stakeholder_id || parsed?.stakeholderId);
+                const hasCoordinatorId = !!(parsed?.Coordinator_ID || parsed?.CoordinatorId || parsed?.coordinator_id || parsed?.coordinatorId);
+                if (hasStakeholderId || roleLower.includes('stakeholder')) recipientType = 'Stakeholder';
+                else if (hasCoordinatorId || roleLower.includes('coordinator')) recipientType = 'Coordinator';
+            }
+
+            if (!recipientId) return;
             const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
             const params = new URLSearchParams({ recipientId: String(recipientId), recipientType });
             const url = base ? `${base}/api/notifications/unread-count?${params.toString()}` : `/api/notifications/unread-count?${params.toString()}`;
