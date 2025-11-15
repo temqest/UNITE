@@ -56,6 +56,17 @@ export default function SignIn() {
 
       const { token, data } = body;
 
+      // Debug: Log response data to help diagnose production issues
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Login] Response data:', {
+          hasToken: !!token,
+          hasData: !!data,
+          staffType: data?.StaffType || data?.staff_type || data?.role,
+          isAdmin: data?.isAdmin,
+          dataKeys: data ? Object.keys(data) : []
+        });
+      }
+
       // Persist auth details: token + user
       const storage = rememberMe ? localStorage : sessionStorage;
 
@@ -67,27 +78,24 @@ export default function SignIn() {
       // client-side getUserInfo() can reliably detect roles during
       // hydration even when the app used sessionStorage or a different key.
       try {
+        // Get StaffType from response - backend now includes this field
+        const staffType = data?.StaffType || data?.staff_type || data?.role || null;
+        const staffTypeStr = String(staffType || "").toLowerCase();
+        
+        // Determine if user is Admin: StaffType === 'Admin' or explicit isAdmin flag
+        // This is critical for sidebar to show correct icons
+        const isAdminUser = 
+          !!data?.isAdmin || 
+          staffType === 'Admin' || 
+          staffTypeStr === 'admin' ||
+          (staffTypeStr.includes('sys') && staffTypeStr.includes('admin'));
+        
         const legacy = {
-          role:
-            data?.staff_type ||
-            data?.role ||
-            (data?.Stakeholder_ID ||
-            data?.stakeholder_id ||
-            data?.Coordinator_ID
-              ? "Stakeholder"
-              : null),
-          isAdmin:
-            !!data?.isAdmin ||
-            String(data?.staff_type || "")
-              .toLowerCase()
-              .includes("admin") ||
-            (String(data?.role || "")
-              .toLowerCase()
-              .includes("sys") &&
-              String(data?.role || "")
-                .toLowerCase()
-                .includes("admin")),
-          First_Name: data?.First_Name || data?.first_name || null,
+          role: staffType,
+          StaffType: staffType, // CRITICAL: Sidebar needs this exact field name
+          staff_type: staffType, // Also include lowercase variant for compatibility
+          isAdmin: isAdminUser,
+          First_Name: data?.First_Name || data?.first_name || data?.FirstName || null,
           email: data?.Email || data?.email || null,
           id:
             data?.id ||
@@ -96,14 +104,31 @@ export default function SignIn() {
             data?.Stakeholder_ID ||
             data?.StakeholderId ||
             data?.stakeholder_id ||
+            data?.Coordinator_ID ||
+            data?.CoordinatorId ||
+            data?.coordinator_id ||
             data?.user_id ||
             null,
+          // Include all original data for full compatibility
+          ...data,
         };
 
-        if (typeof window !== "undefined")
+        if (typeof window !== "undefined") {
           localStorage.setItem("unite_user", JSON.stringify(legacy));
+          
+          // Debug: Verify what was stored
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[Login] Stored legacy object:', {
+              StaffType: legacy.StaffType,
+              role: legacy.role,
+              isAdmin: legacy.isAdmin,
+              hasStaffType: !!legacy.StaffType
+            });
+          }
+        }
       } catch (e) {
-        // swallow any client storage errors
+        // Log error in development to help debug production issues
+        console.error("Error storing user info:", e);
       }
 
       // Emit an in-window event to notify client-side components of an

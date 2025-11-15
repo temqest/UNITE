@@ -66,18 +66,27 @@ export function getUserInfo(): UserInfo {
   const role = foundRole ? String(foundRole).trim() : null
   // debug logs removed
 
-  // Treat only system-admin style roles as admin (e.g. 'sysadmin', 'system_admin', 'system admin')
-  // This avoids matching other roles that happen to include 'admin' as a substring.
-  // Honor an explicit isAdmin flag if present in the stored object (backwards
-  // compatibility), otherwise derive from the role string requiring both
-  // 'sys'/'system' and 'admin' to avoid accidental matches.
+  // Determine if user is Admin:
+  // 1. Check explicit isAdmin flag (preferred)
+  // 2. Check if StaffType === 'Admin' (most reliable - this is what backend sends)
+  // 3. Fallback: check if role string contains both 'sys'/'system' and 'admin' (for system admin variants)
   let isAdmin = false
   if (parsed && (parsed.isAdmin === true || parsed.isAdmin === 'true')) {
     isAdmin = true
-  } else if (role) {
-    const lower = String(role).toLowerCase()
-    // require both 'sys' (or 'system') and 'admin' to be present in the role string
-    isAdmin = /sys|system/.test(lower) && /admin/.test(lower)
+  } else if (role || parsed) {
+    // Check StaffType first (most reliable)
+    const staffType = parsed?.StaffType || parsed?.Staff_Type || parsed?.staff_type || parsed?.staffType || role
+    const staffTypeLower = String(staffType || '').toLowerCase()
+    
+    // If StaffType is explicitly 'Admin', user is admin
+    if (staffTypeLower === 'admin') {
+      isAdmin = true
+    } else if (role) {
+      const lower = String(role).toLowerCase()
+      // Fallback: require both 'sys' (or 'system') and 'admin' to be present in the role string
+      // This handles system admin variants like 'sysadmin', 'system_admin', etc.
+      isAdmin = /sys|system/.test(lower) && /admin/.test(lower)
+    }
   }
 
   // build display name like Campaign page: First + Middle + Last or fallback to name
