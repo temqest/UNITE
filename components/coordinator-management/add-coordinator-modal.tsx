@@ -377,8 +377,8 @@ export default function AddCoordinatorModal({
                   }}
                 >
                   {provinces.map((prov) => (
-                    <SelectItem key={prov.id}>{prov.name}</SelectItem>
-                  ))}
+                      <SelectItem key={String(prov.id)} textValue={String(prov.name)}>{String(prov.name)}</SelectItem>
+                    ))}
                 </Select>
 
                 <Select
@@ -400,7 +400,7 @@ export default function AddCoordinatorModal({
                   }}
                 >
                   {districts.map((district) => (
-                    <SelectItem key={district.id}>{district.name}</SelectItem>
+                    <SelectItem key={String(district.id)} textValue={String(district.name)}>{String(district.name)}</SelectItem>
                   ))}
                 </Select>
 

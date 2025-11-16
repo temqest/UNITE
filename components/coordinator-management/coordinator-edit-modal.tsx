@@ -330,8 +330,8 @@ export default function EditCoordinatorModal({
                   }}
                 >
                   {(provinces || []).map((p) => (
-                    <SelectItem key={p.id}>{p.name}</SelectItem>
-                  ))}
+                      <SelectItem key={String(p.id)} textValue={String(p.name)}>{p.name}</SelectItem>
+                    ))}
                 </Select>
               </div>
               <div>
@@ -346,8 +346,8 @@ export default function EditCoordinatorModal({
                   disabled={!selectedProvinceId}
                 >
                   {(districts || []).map((d) => (
-                    <SelectItem key={d.id}>{d.name}</SelectItem>
-                  ))}
+                      <SelectItem key={String(d.id)} textValue={String(d.name)}>{d.name}</SelectItem>
+                    ))}
                 </Select>
               </div>
             </div>

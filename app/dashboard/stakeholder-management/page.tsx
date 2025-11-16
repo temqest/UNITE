@@ -13,7 +13,6 @@ import QuickFilterModal from "@/components/stakeholder-management/quick-filter-m
 import AdvancedFilterModal from "@/components/stakeholder-management/advanced-filter-modal";
 import EditStakeholderModal from "@/components/stakeholder-management/stakeholder-edit-modal";
 import DeleteStakeholderModal from "@/components/stakeholder-management/delete-stakeholder-modal";
-import GenerateCodeModal from "@/components/stakeholder-management/generate-code-modal";
 // Removed verbose debug logging from this page per request
 
 interface StakeholderFormData {
@@ -36,6 +35,7 @@ export default function StakeholderManagement() {
   const [selectedStakeholders, setSelectedStakeholders] = useState<string[]>(
     [],
   );
+  const [selectedTab, setSelectedTab] = useState<string>("all");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -62,6 +62,9 @@ export default function StakeholderManagement() {
     null,
   );
   const [districtsList, setDistrictsList] = useState<any[]>([]);
+  const [provincesList, setProvincesList] = useState<any[]>([]);
+  const [provincesMap, setProvincesMap] = useState<Record<string, string>>({});
+  const [municipalityCache, setMunicipalityCache] = useState<Record<string, string>>({});
   const [userDistrictId, setUserDistrictId] = useState<string | null>(null);
   // userDistrictId that is explicitly passed when opening the Add modal so
   // modal receives the computed value immediately (avoids React state async race)
@@ -157,7 +160,9 @@ export default function StakeholderManagement() {
         const map: Record<string, any> = {};
 
         for (const d of items) {
+          // Support legacy and new shapes: prefer legacy District_ID, but also index by _id
           if (d.District_ID) map[String(d.District_ID)] = d;
+          if (d._id) map[String(d._id)] = d;
         }
         setDistrictsMap(map);
         setDistrictsList(items);
@@ -167,6 +172,35 @@ export default function StakeholderManagement() {
     };
 
     loadDistricts();
+  }, []);
+
+  // Load provinces so we can resolve province ObjectIds to human-friendly names
+  useEffect(() => {
+    const loadProvinces = async () => {
+      try {
+        const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+        const url = base ? `${base}/api/locations/provinces` : `/api/locations/provinces`;
+        const token = typeof window !== "undefined" ? localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token") : null;
+        const headers: any = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch(url, { headers });
+        if (!res.ok) return;
+        const text = await res.text();
+        const json = text ? JSON.parse(text) : null;
+        const items = (json && (json.data || json.provinces)) || [];
+        setProvincesList(items || []);
+        const pm: Record<string, string> = {};
+        for (const p of items || []) {
+          if (p._id) pm[String(p._id)] = p.name || p.Province_Name || p.Name || String(p._id);
+          if (p.id) pm[String(p.id)] = p.name || p.Province_Name || p.Name || String(p.id);
+        }
+        setProvincesMap(pm);
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    loadProvinces();
   }, []);
 
   const handleSearch = (query: string) => {
@@ -181,10 +215,7 @@ export default function StakeholderManagement() {
     // export handler placeholder
   };
 
-  const handleCreateCode = async () => {
-    // open generate code modal
-    setIsGenerateCodeOpen(true);
-  };
+  // generate-code functionality removed from toolbar per new design
 
   const handleQuickFilter = () => {
     setOpenQuickFilter(true);
@@ -332,12 +363,8 @@ export default function StakeholderManagement() {
     setOpenUserDistrictId(null);
   };
 
-  const [isGenerateCodeOpen, setIsGenerateCodeOpen] = useState(false);
-
   const handleCodeCreated = (code: any) => {
-    // No page-level copy UI: the modal shows the generated code and copy success message.
-    // This callback is left for any page-level refresh hooks in the future.
-    // potential place to refresh lists if codes are shown in UI
+    // kept for compatibility; generate-code modal removed from toolbar
   };
 
   const handleModalSubmit = async (data: any) => {
@@ -363,7 +390,35 @@ export default function StakeholderManagement() {
         ? `${base}/api/stakeholders/register`
         : `/api/stakeholders/register`;
 
+      // Resolve District_ID robustly: the frontend may have a Mongo _id, a legacy
+      // District_ID (like CSUR-001), or a generic numeric/string id. Prefer the
+      // canonical District.District_ID when available by looking up the
+      // pre-fetched `districtsList`. Also include the DB object id as a
+      // supplemental field to maximize compatibility with different backends.
+      let resolvedDistrictValue: any = data.districtId || data.district || userDistrictId || null;
+      let resolvedDistrictObj: any = null;
+
+      try {
+        if (resolvedDistrictValue && Array.isArray(districtsList) && districtsList.length > 0) {
+          const found = districtsList.find((d: any) =>
+            String(d._id) === String(resolvedDistrictValue) ||
+            String(d.id) === String(resolvedDistrictValue) ||
+            String(d.District_ID) === String(resolvedDistrictValue),
+          );
+
+          if (found) {
+            resolvedDistrictObj = found;
+            // Prefer the human-readable District_ID (e.g. CSUR-001) if present,
+            // otherwise fall back to the DB _id so the backend can validate.
+            resolvedDistrictValue = found.District_ID || found._id || found.id || resolvedDistrictValue;
+          }
+        }
+      } catch (e) {
+        // ignore lookup errors and fall back to raw values
+      }
+
       const payload: any = {
+        // Legacy/previously used keys (kept for backward compatibility)
         First_Name: data.firstName,
         Middle_Name: data.middleName || null,
         Last_Name: data.lastName,
@@ -372,8 +427,25 @@ export default function StakeholderManagement() {
         Phone_Number: data.contactNumber,
         Password: data.password,
         Province_Name: data.province,
-        District_ID: data.districtId || data.district || userDistrictId || null,
+        // Primary field used by backend validations
+        District_ID: resolvedDistrictValue || null,
+        // Supplemental: include DB object id when available (some backends expect this)
+        District_ObjectId: resolvedDistrictObj?._id || resolvedDistrictObj?.id || null,
         City_Municipality: data.cityMunicipality || null,
+        // Provide municipality DB id (backend register expects `municipality` id)
+        municipality: data.municipality || data.cityMunicipality || null,
+
+        // New/normalized keys expected by `stakeholder.service.register`
+        firstName: data.firstName,
+        middleName: data.middleName || null,
+        lastName: data.lastName,
+        email: data.stakeholderEmail,
+        phoneNumber: data.contactNumber,
+        password: data.password,
+        organizationInstitution: data.organization || null,
+        // Send DB object ids for district/province/municipality where possible
+        district: resolvedDistrictObj?._id || resolvedDistrictValue || null,
+        province: resolvedDistrictObj?.Province_ID || data.provinceId || null,
       };
 
       // If coordinator creating, include Coordinator_ID
@@ -451,7 +523,6 @@ export default function StakeholderManagement() {
     } catch (err: any) {
       if (!modalError)
         setModalError(err?.message || "Failed to create stakeholder");
-      console.error(err);
     } finally {
       setIsCreating(false);
     }
@@ -580,8 +651,11 @@ export default function StakeholderManagement() {
 
     const formatDistrict = (districtObj: any) => {
       if (!districtObj) return "";
+      // Support both legacy and new district shapes
       if (districtObj.District_Number)
         return `${ordinalSuffix(districtObj.District_Number)} District`;
+      if (districtObj.District_Name) return districtObj.District_Name;
+      if (districtObj.name) return districtObj.name;
       if (districtObj.District_Name) return districtObj.District_Name;
 
       return "";
@@ -732,8 +806,13 @@ export default function StakeholderManagement() {
 
       // Debug: log which district IDs are present in the response
       // removed debug logging for response districts
-      const mapped = items.map((s: any) => {
-        const fullName = [s.First_Name, s.Middle_Name, s.Last_Name]
+        const mapped = items.map((s: any) => {
+        // Build full name supporting both legacy (First_Name) and normalized (firstName) keys
+        const fullName = [
+          s.First_Name || s.firstName,
+          s.Middle_Name || s.middleName,
+          s.Last_Name || s.lastName,
+        ]
           .filter(Boolean)
           .join(" ");
         // Prefer a populated District object when available
@@ -741,39 +820,71 @@ export default function StakeholderManagement() {
 
         // If not populated, try to resolve from prefetched districtsMap using District_ID
         if (!districtObj && districtsMap && (s.District_ID || s.DistrictId)) {
-          districtObj =
-            districtsMap[String(s.District_ID || s.DistrictId)] || null;
+          districtObj = districtsMap[String(s.District_ID || s.DistrictId)] || null;
         }
-        const province =
-          s.Province_Name ||
-          (districtObj &&
-            (districtObj.Province_Name || districtObj.ProvinceName)) ||
-          "";
+
+        // If still not populated, try to resolve using the districtsList by matching
+        // against known id fields (DB _id, id, or District_ID). This covers cases
+        // where the backend returns `district` as an ObjectId reference instead
+        // of a populated object or a legacy District_ID string.
+        if (!districtObj && Array.isArray(districtsList) && districtsList.length > 0) {
+          const candidate = districtsList.find((d: any) => {
+            const sid = s.district || s.district_id || s.districtId || s.District_ID || s.DistrictId || s.District;
+
+            if (!sid) return false;
+
+            return (
+              String(d._id) === String(sid) ||
+              String(d.id) === String(sid) ||
+              String(d.District_ID) === String(sid) ||
+              String(d.District_ID) === String(s.District_ID)
+            );
+          });
+
+          if (candidate) districtObj = candidate;
+        }
+        // Compute province display: prefer explicit Province_Name, else use district->province or province id
+        let province = s.Province_Name || "";
+        if (!province && districtObj) {
+          // districtObj.province may be an id or a populated object
+          if (typeof districtObj.province === 'string' || typeof districtObj.province === 'number') {
+            province = provincesMap[String(districtObj.province)] || "";
+          } else if (districtObj.province && (districtObj.province.name || districtObj.province.Province_Name)) {
+            province = districtObj.province.name || districtObj.province.Province_Name || "";
+          }
+        }
+        // If still empty but the stakeholder payload included a province id, resolve it
+        if (!province && s.province) {
+          province = provincesMap[String(s.province)] || "";
+        }
         let districtDisplay = "";
 
         if (districtObj) {
           districtDisplay = formatDistrict(districtObj);
         } else if (s.District_Name) {
           districtDisplay = s.District_Name;
-        } else if (s.District_ID) {
+        } else if (s.District_ID || s.district) {
           // fallback: try to infer number from District_ID like CSUR-001 -> 1
-          const m = String(s.District_ID).match(/(\d+)$/);
+          const idCandidate = s.District_ID || s.district;
+          const m = String(idCandidate).match(/(\d+)$/);
 
           if (m) {
             const num = Number(m[1]);
 
-            if (!Number.isNaN(num))
-              districtDisplay = `${ordinalSuffix(num)} District`;
+            if (!Number.isNaN(num)) districtDisplay = `${ordinalSuffix(num)} District`;
           } else {
-            districtDisplay = String(s.District_ID);
+            districtDisplay = String(idCandidate);
           }
         }
 
         return {
           id: s.Stakeholder_ID || s.id || "",
           name: fullName,
-          email: s.Email || "",
-          phone: s.Phone_Number || "",
+          email: s.Email || s.email || "",
+          phone: s.Phone_Number || s.phoneNumber || s.phone || "",
+          province: province || "",
+          municipality:
+            s.City_Municipality || s.Municipality || s.City || s.cityMunicipality || s.municipality || s.municipality_id || "",
           // Resolve organization from multiple possible shapes, including nested objects
           organization: ((): string => {
             const tryValues = [
@@ -819,6 +930,255 @@ export default function StakeholderManagement() {
           district: districtDisplay,
         };
       });
+
+      // Resolve municipality names for any mapped items that only have an id
+      const needsMunicipalityResolve: Array<{ districtId: string; municipalityId: string }> = [];
+      mapped.forEach((m: any, idx: number) => {
+        const raw = items[idx] || {};
+        const munId = raw.municipality || raw.Municipality || raw.municipality_id || raw.Municipality_ID || null;
+        if (munId && !municipalityCache[String(munId)]) {
+          needsMunicipalityResolve.push({ districtId: raw.district || raw.District_ID || raw.DistrictId || "", municipalityId: String(munId) });
+        }
+      });
+
+      // Also collect district ids that couldn't be resolved to objects so we can
+      // fetch their details (some backends return only ObjectId refs like 'district')
+      const needsDistrictResolve: string[] = [];
+      mapped.forEach((m: any, idx: number) => {
+        const raw = items[idx] || {};
+        const did = raw.district || raw.District || raw.district_id || raw.District_ID || raw.districtId || raw.DistrictId || null;
+        // if we have a district id but no human-friendly district/province in the mapped row
+        if (did && (!m.district || String(m.district).trim() === "")) {
+          if (!needsDistrictResolve.includes(String(did))) needsDistrictResolve.push(String(did));
+        }
+      });
+
+      if (needsMunicipalityResolve.length > 0) {
+        // Group by district to minimize requests
+        const byDistrict: Record<string, Set<string>> = {};
+        for (const n of needsMunicipalityResolve) {
+          const d = n.districtId || "";
+          if (!byDistrict[d]) byDistrict[d] = new Set();
+          byDistrict[d].add(n.municipalityId);
+        }
+
+        (async () => {
+          try {
+            const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+            const token = typeof window !== "undefined" ? localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token") : null;
+            const headers: any = {};
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+
+            const newCache: Record<string, string> = { ...municipalityCache };
+
+            for (const districtIdKey of Object.keys(byDistrict)) {
+              if (!districtIdKey) continue;
+              const url = base
+                ? `${base}/api/locations/districts/${encodeURIComponent(String(districtIdKey))}/municipalities`
+                : `/api/locations/districts/${encodeURIComponent(String(districtIdKey))}/municipalities`;
+              try {
+                const res = await fetch(url, { headers });
+                if (!res.ok) continue;
+                const txt = await res.text();
+                let body: any = null;
+                try { body = txt ? JSON.parse(txt) : null; } catch { body = null; }
+                const itemsMun = (body && (body.data || body)) || [];
+                for (const mm of itemsMun) {
+                  const id = String(mm._id || mm.id || mm.Municipality_ID || mm.MunicipalityId || mm.name || mm.Name || mm.City_Municipality || "");
+                  const label = String(mm.name || mm.Name || mm.City_Municipality || mm.City || mm);
+                  if (id) newCache[id] = label;
+                }
+              } catch (e) {
+                // ignore
+              }
+            }
+
+            // If cache changed, update state and remap displayed stakeholders
+            setMunicipalityCache((prev) => {
+              const merged = { ...prev, ...newCache };
+              return merged;
+            });
+
+            // Update stakeholders display using new cache
+            setStakeholders((prev) =>
+              prev.map((p: any) => {
+                const rawIndex = mapped.findIndex((x: any) => x.id === p.id);
+                if (rawIndex === -1) return p;
+                const raw = items[rawIndex] || {};
+                const mid = raw.municipality || raw.Municipality || raw.municipality_id || raw.Municipality_ID || null;
+                if (mid && (newCache[String(mid)] || municipalityCache[String(mid)])) {
+                  return { ...p, municipality: newCache[String(mid)] || municipalityCache[String(mid)] };
+                }
+                return p;
+              }),
+            );
+          } catch (e) {
+            // ignore
+          }
+        })();
+
+        // If there are district IDs that weren't resolved to objects, fetch their details
+        // and update districtsMap/districtsList so province/district display can be populated.
+        if (needsDistrictResolve.length > 0) {
+          (async () => {
+            try {
+              const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+              const token = typeof window !== "undefined" ? localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token") : null;
+              const headers: any = {};
+              if (token) headers["Authorization"] = `Bearer ${token}`;
+
+              const fetchedDistricts: any[] = [];
+
+              for (const did of needsDistrictResolve) {
+                if (!did) continue;
+                try {
+                  const url = base ? `${base}/api/districts/${encodeURIComponent(did)}` : `/api/districts/${encodeURIComponent(did)}`;
+                  const res = await fetch(url, { headers });
+                  if (!res.ok) continue;
+                  const txt = await res.text();
+                  let body: any = null;
+                  try { body = txt ? JSON.parse(txt) : null; } catch { body = null; }
+                  const d = body?.data || body?.district || body || null;
+                  if (d) fetchedDistricts.push(d);
+                } catch (e) {
+                  // ignore per-district errors
+                }
+              }
+
+              if (fetchedDistricts.length > 0) {
+                // merge into districtsMap and districtsList
+                setDistrictsMap((prev) => {
+                  const next = { ...(prev || {}) } as Record<string, any>;
+                  for (const d of fetchedDistricts) {
+                    if (d.District_ID) next[String(d.District_ID)] = d;
+                    if (d._id) next[String(d._id)] = d;
+                  }
+                  return next;
+                });
+
+                setDistrictsList((prev) => {
+                  const copy = Array.isArray(prev) ? [...prev] : [];
+                  for (const d of fetchedDistricts) {
+                    const exists = copy.find((x: any) => String(x._id) === String(d._id) || String(x.District_ID) === String(d.District_ID));
+                    if (!exists) copy.push(d);
+                  }
+                  return copy;
+                });
+
+                // Re-map stakeholders to include resolved district/province names
+                setStakeholders((prev) =>
+                  prev.map((p: any) => {
+                    const rawIndex = mapped.findIndex((x: any) => x.id === p.id);
+                    if (rawIndex === -1) return p;
+                    const raw = items[rawIndex] || {};
+                    const sid = raw.district || raw.district_id || raw.District_ID || raw.District || raw.districtId || raw.DistrictId;
+                    if (!sid) return p;
+                    const found = fetchedDistricts.find((fd) => String(fd._id) === String(sid) || String(fd.District_ID) === String(sid));
+                    if (!found) return p;
+                    // compute display strings similar to mapping above
+                    const ordinalSuffix = (n: number | string) => {
+                      const num = Number(n);
+                      if (Number.isNaN(num)) return String(n);
+                      const j = num % 10,
+                        k = num % 100;
+                      if (j === 1 && k !== 11) return `${num}st`;
+                      if (j === 2 && k !== 12) return `${num}nd`;
+                      if (j === 3 && k !== 13) return `${num}rd`;
+                      return `${num}th`;
+                    };
+                    const formatDistrict = (districtObj: any) => {
+                      if (!districtObj) return "";
+                      if (districtObj.District_Number)
+                        return `${ordinalSuffix(districtObj.District_Number)} District`;
+                      if (districtObj.District_Name) return districtObj.District_Name;
+                      return "";
+                    };
+
+                    const provinceName = found.Province_Name || found.Province || found.ProvinceName || "";
+                    const districtDisplay = formatDistrict(found) || found.District_Name || found.District_ID || String(sid);
+
+                    return { ...p, province: provinceName || p.province || "", district: districtDisplay || p.district || "" };
+                  }),
+                );
+              }
+            } catch (e) {
+              // ignore district resolve errors
+            }
+          })();
+        }
+      }
+
+      // Additional municipality resolution pass: group any remaining municipality ids by district
+      // Use broader field fallbacks to detect municipality ids even in mixed-shaped responses.
+      (async () => {
+        try {
+          const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+          const token = typeof window !== "undefined" ? localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token") : null;
+          const headers: any = {};
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+
+          const byDistrict2: Record<string, Set<string>> = {};
+
+          for (const raw of items) {
+            const mid = raw.municipality || raw.Municipality || raw.municipality_id || raw.Municipality_ID || raw.municipalityId || raw.MunicipalityId || null;
+            if (!mid) continue;
+            if (municipalityCache[String(mid)]) continue; // already known
+
+            const did = raw.district || raw.District || raw.district_id || raw.District_ID || raw.districtId || raw.DistrictId || null;
+            if (!did) continue; // cannot resolve without district
+
+            if (!byDistrict2[String(did)]) byDistrict2[String(did)] = new Set();
+            byDistrict2[String(did)].add(String(mid));
+          }
+
+          if (Object.keys(byDistrict2).length === 0) return;
+
+          const newCache: Record<string, string> = { ...municipalityCache };
+
+          for (const districtIdKey of Object.keys(byDistrict2)) {
+            try {
+              const url = base
+                ? `${base}/api/locations/districts/${encodeURIComponent(String(districtIdKey))}/municipalities`
+                : `/api/locations/districts/${encodeURIComponent(String(districtIdKey))}/municipalities`;
+              const res = await fetch(url, { headers });
+              if (!res.ok) continue;
+              const txt = await res.text();
+              let body: any = null;
+              try { body = txt ? JSON.parse(txt) : null; } catch { body = null; }
+              const itemsMun = (body && (body.data || body)) || [];
+              for (const mm of itemsMun) {
+                const id = String(mm._id || mm.id || mm.Municipality_ID || mm.MunicipalityId || mm.name || mm.Name || mm.City_Municipality || "");
+                const label = String(mm.name || mm.Name || mm.City_Municipality || mm.City || mm);
+                if (id) newCache[id] = label;
+              }
+            } catch (e) {
+              // ignore per-district errors
+            }
+          }
+
+          // Merge and update state if changed
+          setMunicipalityCache((prev) => {
+            const merged = { ...prev, ...newCache };
+            return merged;
+          });
+
+          // Update stakeholders display using new cache
+          setStakeholders((prev) =>
+            prev.map((p: any) => {
+              const rawIndex = mapped.findIndex((x: any) => x.id === p.id);
+              if (rawIndex === -1) return p;
+              const raw = items[rawIndex] || {};
+              const mid = raw.municipality || raw.Municipality || raw.municipality_id || raw.Municipality_ID || raw.municipalityId || raw.MunicipalityId || null;
+              if (mid && (newCache[String(mid)] || municipalityCache[String(mid)])) {
+                return { ...p, municipality: newCache[String(mid)] || municipalityCache[String(mid)] };
+              }
+              return p;
+            }),
+          );
+        } catch (e) {
+          // ignore
+        }
+      })();
 
       // Debug: log detailed information for any items where organization resolved to empty
       try {
@@ -1046,10 +1406,11 @@ export default function StakeholderManagement() {
       <StakeholderToolbar
         onAddCoordinator={handleAddStakeholder}
         onAdvancedFilter={handleAdvancedFilter}
-        onCreateCode={handleCreateCode}
         onExport={handleExport}
         onQuickFilter={handleQuickFilter}
         onSearch={handleSearch}
+        defaultTab={selectedTab}
+        onTabChange={(t) => setSelectedTab(t)}
       />
 
       {/* Table Content */}
@@ -1059,7 +1420,32 @@ export default function StakeholderManagement() {
         )}
         {error && <p className="text-sm text-red-500">{error}</p>}
         <StakeholderTable
-          coordinators={stakeholders}
+          coordinators={
+            selectedTab === "all"
+              ? stakeholders
+              : stakeholders.filter((s: any) => {
+                  const statusRaw =
+                    s.Status || s.status || s.Approval || s.approval || "";
+                  const st = String(statusRaw || "").toLowerCase();
+
+                  if (selectedTab === "approved")
+                    return (
+                      st.includes("approve") ||
+                      st.includes("completed") ||
+                      st.includes("approved")
+                    );
+                  if (selectedTab === "pending")
+                    return (
+                      st.includes("pending") ||
+                      st.includes("awaiting") ||
+                      st.includes("wait")
+                    );
+                  if (selectedTab === "rejected")
+                    return st.includes("reject") || st.includes("rejected");
+
+                  return true;
+                })
+          }
           selectedCoordinators={selectedStakeholders}
           onActionClick={handleActionClick}
           onDeleteCoordinator={handleDeleteStakeholder}
@@ -1069,6 +1455,7 @@ export default function StakeholderManagement() {
           searchQuery={searchQuery}
           // Pass true only when user is both a system admin and has StaffType='Admin'
           isAdmin={canManageStakeholders}
+          municipalityCache={municipalityCache}
         />
       </div>
 
@@ -1137,29 +1524,7 @@ export default function StakeholderManagement() {
         }}
         onClose={() => setOpenAdvancedFilter(false)}
       />
-      <GenerateCodeModal
-        isOpen={isGenerateCodeOpen}
-        isSysAdmin={canManageStakeholders}
-        userCoordinatorId={(() => {
-          try {
-            const raw = localStorage.getItem("unite_user");
-            const parsed = raw ? JSON.parse(raw) : null;
-
-            return (
-              parsed?.id ||
-              parsed?.ID ||
-              parsed?.Coordinator_ID ||
-              parsed?.coordinator_id ||
-              null
-            );
-          } catch (e) {
-            return null;
-          }
-        })()}
-        userDistrictId={userDistrictId}
-        onClose={() => setIsGenerateCodeOpen(false)}
-        onCreated={handleCodeCreated}
-      />
+      {/* Generate code modal removed from toolbar per new design */}
     </div>
   );
 }
