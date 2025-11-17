@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 // use native inputs here for tighter visual control
 import { Button } from "@heroui/button";
 import { Link } from "@heroui/link";
 import { Eye, EyeOff, Check } from "lucide-react";
 
 export default function SignUp() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState<"next" | "prev">("next");
   const [showPassword, setShowPassword] = useState(false);
@@ -22,6 +24,7 @@ export default function SignUp() {
   const [codeValidated, setCodeValidated] = useState(false);
   const [validatedData, setValidatedData] = useState<any>(null);
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+  const [showModal, setShowModal] = useState(false);
 
   const [provinces, setProvinces] = useState<any[]>([]);
   const [districts, setDistricts] = useState<any[]>([]);
@@ -210,6 +213,7 @@ export default function SignUp() {
       return;
     }
     setRegistrationSuccess(true);
+    setShowModal(true);
   };
 
   return (
@@ -499,19 +503,50 @@ export default function SignUp() {
                     onClick={sendVerificationCode}
                     disabled={!formData.Email.trim() || emailSent}
                   >
-                    {validatingCode ? "Sending..." : emailSent ? "Email Sent" : "Send Verification Email"}
+                    {validatingCode ? "Sending..." : emailSent ? "Code Sent" : "Send Verification Code"}
                   </button>
                 </div>
                 {emailSent && (
                   <p className="text-sm text-gray-600 mt-2">
-                    Check your email and click the verification link to complete your signup.
+                    Check your email for the verification code to complete your signup.
                   </p>
                 )}
                 {emailSent && !emailVerified && (
                   <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                     <p className="text-sm text-blue-800">
-                      A verification link has been sent to your email. Please check your inbox and click the link to complete your registration.
+                      A verification code has been sent to your email. Please check your inbox and enter the code below to complete your registration.
                     </p>
+                    <div className="mt-3">
+                      <label
+                        className="text-sm font-medium block mb-1"
+                        htmlFor="verification-code"
+                      >
+                        Verification Code
+                      </label>
+                      <input
+                        className={`${inputClass} w-full`}
+                        id="verification-code"
+                        value={formData.Verification_Code}
+                        onChange={(e) => update({ Verification_Code: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm"
+                        onClick={verifyCode}
+                        disabled={validatingCode}
+                      >
+                        {validatingCode ? "Verifying..." : "Verify Code"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {emailSent && emailVerified && (
+                  <div className="mt-4 p-4 bg-green-50 rounded-lg">
+                    <div className="flex items-center gap-2 text-green-800">
+                      <Check className="w-5 h-5" />
+                      <p className="text-sm font-medium">Email verified successfully!</p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -520,11 +555,6 @@ export default function SignUp() {
         </div>
 
         {error && <div className="text-sm text-red-600">{error}</div>}
-        {registrationSuccess && (
-          <div className="text-sm text-green-600">
-            Verification email sent! Please check your email and click the verification link to complete your registration.
-          </div>
-        )}
 
         <div className="flex items-center gap-3">
           {step > 0 ? (
@@ -564,6 +594,33 @@ export default function SignUp() {
           Sign in
         </Link>
       </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                <Check className="h-6 w-6 text-green-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Registration Successful!
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                Your sign-up request has been submitted successfully. It is now pending coordinator approval. You will be notified once it's approved.
+              </p>
+              <Button
+                className="w-full bg-danger-600 hover:bg-danger-700 text-white"
+                onClick={() => {
+                  setShowModal(false);
+                  router.push("/");
+                }}
+              >
+                Go to Home
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
