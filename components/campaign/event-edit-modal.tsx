@@ -135,41 +135,10 @@ export default function EditEventModal({
     user &&
     (user.staff_type === "Admin" || user.staff_type === "Coordinator")
   );
+  const isAdmin = user && user.staff_type === "Admin";
 
-  // When admin or coordinator opens edit modal, load stakeholders for the event's coordinator district
-  useEffect(() => {
-    const fetchForRequest = async () => {
-      try {
-        if (!request) return;
-        const coordId =
-          request.coordinator?.Coordinator_ID || request.coordinator?.CoordinatorId || request.Coordinator_ID || request.event?.Coordinator_ID || null;
-        if (!coordId) return;
 
-        const token = localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token");
-        const headers: any = { "Content-Type": "application/json" };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-
-        // Resolve coordinator details for district
-        const coordRes = await fetch(`${API_URL}/api/coordinators/${encodeURIComponent(coordId)}`, { headers, credentials: 'include' });
-        const coordBody = await coordRes.json();
-        const coordData = coordBody?.data || coordBody;
-        const districtId = coordData?.District_ID || coordData?.District?.District_ID || coordData?.district_id || coordData?.district || null;
-        if (!districtId) return;
-
-        const stRes = await fetch(`${API_URL}/api/stakeholders?district_id=${encodeURIComponent(String(districtId))}`, { headers, credentials: 'include' });
-        const stBody = await stRes.json();
-        if (stRes.ok && Array.isArray(stBody.data)) {
-          const opts = (stBody.data || []).map((s: any) => ({ key: s.Stakeholder_ID || s.id, label: `${s.firstName || s.First_Name || ''} ${s.lastName || s.Last_Name || ''}`.trim() }));
-          setStakeholderOptions(opts);
-          // If current selected stakeholder isn't present in refreshed list, keep it but don't overwrite
-        }
-      } catch (e) {
-        // ignore
-      }
-    };
-
-    fetchForRequest();
-  }, [request]);
+  const isStakeholder = user && user.staff_type === "Stakeholder";
 
   const handleSave = async () => {
     if (!request) return;
@@ -261,9 +230,11 @@ export default function EditEventModal({
           .toLowerCase()
           .includes("blood")
       ) {
-        updateData.Target_Donation = goalCount
-          ? parseInt(goalCount, 10)
-          : undefined;
+        if (isAdmin) {
+          updateData.Target_Donation = goalCount
+            ? parseInt(goalCount, 10)
+            : undefined;
+        }
       }
 
       if (
@@ -278,16 +249,32 @@ export default function EditEventModal({
           : undefined;
       }
 
-      if (isAdminOrCoordinator) {
-        // call update endpoint with adminId or coordinatorId
+      // Determine if this is a major change that requires review
+      const hasMajorChanges = (() => {
+        if (!isStakeholder) return false; // Admins/coordinators can make any changes directly
+
+        // Check if dates changed
+        if (startTime !== initialStartTime || endTime !== initialEndTime) return true;
+
+        // Check if target donation changed (for blood drives)
+        if (String(categoryType).toLowerCase().includes("blood")) {
+          const originalGoal = (request.event?.Target_Donation || request.event?.categoryData?.Target_Donation || 0)?.toString() || "";
+          if (goalCount !== originalGoal) return true;
+        }
+
+        return false;
+      })();
+
+      if (!hasMajorChanges) {
+        // Direct update - no review needed
         const body = {
           ...updateData,
           // include coordinatorId or adminId depending on role
           ...(user.staff_type === "Admin"
             ? { adminId: user.id }
-            : { coordinatorId: user.id }),
-        // include stakeholder assignment when set
-        ...(stakeholder ? { MadeByStakeholderID: stakeholder, stakeholder } : {}),
+            : user.staff_type === "Coordinator"
+              ? { coordinatorId: user.id }
+              : { MadeByStakeholderID: user.Stakeholder_ID || user.id }),
         };
 
         const res = await fetch(`${API_URL}/api/requests/${requestId}`, {
@@ -300,7 +287,6 @@ export default function EditEventModal({
         if (!res.ok) {
           if (resp && resp.errors && Array.isArray(resp.errors)) {
             setValidationErrors(resp.errors);
-
             return;
           }
           throw new Error(resp.message || "Failed to update request");
@@ -309,7 +295,7 @@ export default function EditEventModal({
         if (onSaved) onSaved();
         onClose();
       } else {
-        // Stakeholder: create a new change request instead (will be pending)
+        // Major changes - create a change request that needs review
         // Use existing coordinator if present
         const coordinatorId =
           request.coordinator?.Coordinator_ID ||
@@ -345,15 +331,41 @@ export default function EditEventModal({
           // leave undefined if parsing fails
         }
 
-        // For stakeholders, update the existing request via PUT so we don't create a new request
+        // For change requests, update the existing request via PUT
         const body: any = {
           ...updateData,
-          MadeByStakeholderID: stakeholderId,
         };
 
         // include times/date if present
         if (payloadStartDate) body.Start_Date = payloadStartDate;
         if (payloadEndDate) body.End_Date = payloadEndDate;
+
+        // Include the requester id based on role
+        if (isAdminOrCoordinator) {
+          body.adminId = user.staff_type === "Admin" ? user.id : undefined;
+          body.coordinatorId = user.staff_type === "Coordinator" ? user.id : undefined;
+        } else {
+          body.MadeByStakeholderID = stakeholderId;
+        }
+
+        // Determine if this edit requires review (only for stakeholders)
+        const requiresReview = (() => {
+          if (!isStakeholder) return false; // Admins/coordinators don't require review
+
+          // Check if dates changed
+          if (startTime !== initialStartTime || endTime !== initialEndTime) return true;
+
+          // Check if target donation changed (for blood drives)
+          if (isBlood) {
+            const originalGoal = (request.event?.Target_Donation || request.event?.categoryData?.Target_Donation || 0)?.toString() || "";
+            if (goalCount !== originalGoal) return true;
+          }
+
+          return false;
+        })();
+
+        // Include the review requirement flag
+        body.requiresReview = requiresReview;
 
         // PUT to update existing request
         const res = await fetch(`${API_URL}/api/requests/${requestId}`, {
@@ -366,7 +378,6 @@ export default function EditEventModal({
         if (!res.ok) {
           if (resp && resp.errors && Array.isArray(resp.errors)) {
             setValidationErrors(resp.errors);
-
             return;
           }
           throw new Error(resp.message || "Failed to create change request");
@@ -386,6 +397,32 @@ export default function EditEventModal({
   };
 
   // render modal content with inputs; date fields intentionally shown but disabled
+  const cat =
+    (request.category &&
+      (request.category.type || request.category.Type)) ||
+    (request.event &&
+      (request.event.categoryType || request.event.Category)) ||
+    "";
+  const isBlood = String(cat).toLowerCase().includes("blood");
+
+  // Determine if this will be a direct save or require review
+  const willRequireReview = (() => {
+    if (!isStakeholder) return false; // Admins/coordinators don't require review
+
+    // Check if dates changed
+    if (startTime !== initialStartTime || endTime !== initialEndTime) return true;
+
+    // Check if target donation changed (for blood drives)
+    if (isBlood) {
+      const originalGoal = (request.event?.Target_Donation || request.event?.categoryData?.Target_Donation || 0)?.toString() || "";
+      if (goalCount !== originalGoal) return true;
+    }
+
+    return false;
+  })();
+
+  const isDirectSave = !willRequireReview;
+
   return (
     <Modal
       isOpen={isOpen}
@@ -454,45 +491,6 @@ export default function EditEventModal({
               </div>
             </div>
 
-            {/* Stakeholder assignment */}
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">Stakeholder</label>
-              {(() => {
-                const raw = typeof window !== 'undefined' ? localStorage.getItem('unite_user') : null;
-                const u = raw ? JSON.parse(raw) : null;
-                const role = String((u?.staff_type || u?.role || '')).toLowerCase();
-                const isStakeholderUser = role.includes('stakeholder');
-
-                if (isStakeholderUser) {
-                  const name = `${u?.firstName || u?.First_Name || ''} ${u?.lastName || u?.Last_Name || ''}`.trim();
-                  return (
-                    <Input disabled classNames={{ inputWrapper: 'h-10 bg-default-100' }} type="text" value={name || String(stakeholder)} variant="bordered" />
-                  );
-                }
-
-                // Admin or Coordinator may assign/choose stakeholder
-                if (stakeholderOptions.length === 0) {
-                  return (
-                    <Input disabled classNames={{ inputWrapper: 'h-10 bg-default-100' }} type="text" value={stakeholder ? String(stakeholder) : 'No stakeholders available'} variant="bordered" />
-                  );
-                }
-
-                return (
-                  <Select
-                    classNames={{ trigger: 'border-default-200 hover:border-default-400 h-10', value: 'text-sm' }}
-                    placeholder="Select stakeholder (optional)"
-                    selectedKeys={stakeholder ? [stakeholder] : []}
-                    variant="bordered"
-                    onSelectionChange={(keys: any) => setStakeholder(Array.from(keys)[0] as string)}
-                  >
-                    {stakeholderOptions.map((s: any) => (
-                      <SelectItem key={s.key}>{s.label}</SelectItem>
-                    ))}
-                  </Select>
-                );
-              })()}
-            </div>
-
             {/* Category-specific fields */}
             {(() => {
               const cat =
@@ -554,7 +552,8 @@ export default function EditEventModal({
                     <div>
                       <label className="text-sm font-medium">Goal count</label>
                       <Input
-                        classNames={{ inputWrapper: "h-10" }}
+                        disabled={!isAdmin}
+                        classNames={{ inputWrapper: `h-10 ${!isAdmin ? 'bg-default-100' : ''}` }}
                         type="number"
                         value={goalCount}
                         variant="bordered"
@@ -697,10 +696,10 @@ export default function EditEventModal({
             onPress={handleSave}
           >
             {isSubmitting
-              ? isAdminOrCoordinator
+              ? isDirectSave
                 ? "Saving..."
                 : "Submitting request..."
-              : isAdminOrCoordinator
+              : isDirectSave
                 ? "Save changes"
                 : "Submit change request"}
           </Button>
