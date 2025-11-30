@@ -134,7 +134,7 @@ export default function BdriveModal({
                         inputWrapper: "h-11",
                         input: "text-sm",
                       }}
-<Calendar className="w-4 h-4" />
+                      startContent={<Calendar className="w-4 h-4" />}
                       name="startDate"
                       type="date"
                       value={formData.startDate}

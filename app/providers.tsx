@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 
 import { LoadingProvider } from "@/components/loading-overlay";
+import LocationsProvider from "@/components/locations-provider";
 
 export interface ProvidersProps {
   children: React.ReactNode;
@@ -29,7 +30,9 @@ export function Providers({ children, themeProps }: ProvidersProps) {
     <HeroUIProvider navigate={router.push}>
       <NextThemesProvider {...themeProps}>
         <LoadingProvider>
-          {children}
+          <LocationsProvider>
+            {children}
+          </LocationsProvider>
         </LoadingProvider>
       </NextThemesProvider>
     </HeroUIProvider>
