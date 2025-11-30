@@ -41,6 +41,11 @@ const defaultState = {
   getDistrictName: (id: string) => "",
   getMunicipalityName: (id: string) => "",
   getFullLocation: (provinceId?: string, districtId?: string, municipalityId?: string) => "",
+  getDistrictsForProvince: (provinceId: string) => [] as District[],
+  getMunicipalitiesForDistrict: (districtId: string) => [] as Municipality[],
+  getAllProvinces: () => [] as Province[],
+  getAllDistricts: () => [] as District[],
+  getAllMunicipalities: () => [] as Municipality[],
   refreshAll: async () => {},
 };
 
@@ -172,6 +177,28 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
     return parts.join(", ");
   }, [getProvinceName, getDistrictName, getMunicipalityName]);
 
+  const getDistrictsForProvince = useCallback((provinceId: string): District[] => {
+    if (!provinceId) return [];
+    return Object.values(locations.districts).filter(d => d.province === provinceId);
+  }, [locations.districts]);
+
+  const getMunicipalitiesForDistrict = useCallback((districtId: string): Municipality[] => {
+    if (!districtId) return [];
+    return Object.values(locations.municipalities).filter(m => m.district === districtId);
+  }, [locations.municipalities]);
+
+  const getAllProvinces = useCallback((): Province[] => {
+    return Object.values(locations.provinces);
+  }, [locations.provinces]);
+
+  const getAllDistricts = useCallback((): District[] => {
+    return Object.values(locations.districts);
+  }, [locations.districts]);
+
+  const getAllMunicipalities = useCallback((): Municipality[] => {
+    return Object.values(locations.municipalities);
+  }, [locations.municipalities]);
+
   const value = {
     locations,
     loading,
@@ -179,6 +206,11 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
     getDistrictName,
     getMunicipalityName,
     getFullLocation,
+    getDistrictsForProvince,
+    getMunicipalitiesForDistrict,
+    getAllProvinces,
+    getAllDistricts,
+    getAllMunicipalities,
     refreshAll,
   };
 

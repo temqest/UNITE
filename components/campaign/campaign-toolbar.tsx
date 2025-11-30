@@ -29,8 +29,9 @@ import {
   ModalBody,
   ModalFooter,
 } from "@heroui/modal";
-import type { RangeValue } from "@react-types/shared";
-import type { DateValue } from "@react-types/calendar";
+import { RangeValue } from "@react-types/shared";
+import { DateValue } from "@internationalized/date";
+import { useLocations } from "../locations-provider";
 
 import {
   CreateTrainingEventModal,
@@ -51,7 +52,9 @@ interface CampaignToolbarProps {
   // Location data
   provinces?: any[];
   districts?: any[];
+  municipalities?: any[];
   onDistrictFetch?: (provinceId: string | number) => void;
+  counts?: { all: number; approved: number; pending: number; rejected: number };
 }
 
 export default function CampaignToolbar({
@@ -66,9 +69,11 @@ export default function CampaignToolbar({
   onPageChange,
   provinces = [],
   districts = [],
+  municipalities = [],
   onDistrictFetch,
   counts = { all: 0, approved: 0, pending: 0, rejected: 0 },
 }: CampaignToolbarProps) {
+  const { getMunicipalitiesForDistrict } = useLocations();
   const [selectedTab, setSelectedTab] = useState(defaultTab);
   const [selectedEventType, setSelectedEventType] = useState(
     new Set(["blood-drive"]),
@@ -81,6 +86,7 @@ export default function CampaignToolbar({
   );
   const [qProvince, setQProvince] = useState<string>("");
   const [qDistrict, setQDistrict] = useState<string>("");
+  const [qMunicipality, setQMunicipality] = useState<string>("");
 
   // Modal states
   const [isTrainingModalOpen, setIsTrainingModalOpen] = useState(false);
@@ -98,6 +104,7 @@ export default function CampaignToolbar({
   const [advCity, setAdvCity] = useState("");
   const [advProvince, setAdvProvince] = useState("");
   const [advDistrict, setAdvDistrict] = useState("");
+  const [advMunicipality, setAdvMunicipality] = useState("");
   const [advOrganizer, setAdvOrganizer] = useState("");
   const [advDateRange, setAdvDateRange] =
     useState<RangeValue<DateValue> | null>(null);
@@ -214,6 +221,7 @@ export default function CampaignToolbar({
     dateRange: RangeValue<DateValue> | null,
     province: string,
     district: string,
+    municipality: string,
   ) => {
     const filter: any = {};
 
@@ -224,6 +232,7 @@ export default function CampaignToolbar({
     }
     if (province) filter.province = province;
     if (district) filter.district = district;
+    if (municipality) filter.municipality = municipality;
     onQuickFilter?.(filter);
   };
 
@@ -337,19 +346,19 @@ export default function CampaignToolbar({
                         const val = e.target.value;
 
                         setQEventType(val);
-                        applyQuickFilter(val, qDateRange, qProvince, qDistrict);
+                        applyQuickFilter(val, qDateRange, qProvince, qDistrict, qMunicipality);
                       }}
                     >
-                      <SelectItem key="all" value="all">
+                      <SelectItem key="all">
                         All
                       </SelectItem>
-                      <SelectItem key="Blood Drive" value="Blood Drive">
+                      <SelectItem key="Blood Drive">
                         Blood Drive
                       </SelectItem>
-                      <SelectItem key="Training" value="Training">
+                      <SelectItem key="Training">
                         Training
                       </SelectItem>
-                      <SelectItem key="Advocacy" value="Advocacy">
+                      <SelectItem key="Advocacy">
                         Advocacy
                       </SelectItem>
                     </Select>
@@ -369,7 +378,7 @@ export default function CampaignToolbar({
                       variant="bordered"
                       onChange={(val) => {
                         setQDateRange(val);
-                        applyQuickFilter(qEventType, val, qProvince, qDistrict);
+                        applyQuickFilter(qEventType, val, qProvince, qDistrict, qMunicipality);
                       }}
                     />
                   </div>
@@ -391,13 +400,13 @@ export default function CampaignToolbar({
                         onDistrictFetch?.(val);
                         // Clear district
                         setQDistrict("");
-                        applyQuickFilter(qEventType, qDateRange, val, "");
+                        setQMunicipality("");
+                        applyQuickFilter(qEventType, qDateRange, val, "", "");
                       }}
                     >
                       {provinces.map((p) => (
                         <SelectItem
-                          key={p.id || p.province_id}
-                          value={p.id || p.province_id}
+                          key={p._id}
                         >
                           {p.name}
                         </SelectItem>
@@ -419,20 +428,48 @@ export default function CampaignToolbar({
                         const val = e.target.value;
 
                         setQDistrict(val);
+                        setQMunicipality("");
                         applyQuickFilter(
                           qEventType,
                           qDateRange,
                           qProvince,
                           val,
+                          "",
                         );
                       }}
                     >
                       {districts.map((d) => (
                         <SelectItem
-                          key={d.id || d.district_id}
-                          value={d.id || d.district_id}
+                          key={d._id}
                         >
                           {d.name}
+                        </SelectItem>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Municipality</label>
+                    <Select
+                      className="h-9"
+                      isDisabled={!qDistrict}
+                      placeholder="Pick a municipality"
+                      selectedKeys={qMunicipality ? [qMunicipality] : []}
+                      size="sm"
+                      variant="bordered"
+                      radius="md"
+                      onChange={(e) => {
+                        const val = e.target.value;
+
+                        setQMunicipality(val);
+                        applyQuickFilter(qEventType, qDateRange, qProvince, qDistrict, val);
+                      }}
+                    >
+                      {getMunicipalitiesForDistrict(qDistrict).map((m) => (
+                        <SelectItem
+                          key={m._id}
+                        >
+                          {m.name}
                         </SelectItem>
                       ))}
                     </Select>
@@ -574,23 +611,24 @@ export default function CampaignToolbar({
 
                 <div className="h-px w-full bg-default"></div>
 
-                {/* City */}
-                <div className="w-full space-y-1">
-                  <label className="text-xs font-medium">City</label>
-                  <Input
-                    classNames={{
-                      inputWrapper: "h-9 border-default-200",
-                    }}
-                    placeholder="Enter city"
-                    radius="md"
-                    size="sm"
-                    value={advCity}
-                    variant="bordered"
-                    onValueChange={setAdvCity}
-                  />
-                </div>
-
+                {/* City and Province */}
                 <div className="flex gap-4">
+                  {/* City */}
+                  <div className="flex-1 space-y-1">
+                    <label className="text-xs font-medium">City</label>
+                    <Input
+                      classNames={{
+                        inputWrapper: "h-9 border-default-200",
+                      }}
+                      placeholder="Enter city"
+                      radius="md"
+                      size="sm"
+                      value={advCity}
+                      variant="bordered"
+                      onValueChange={setAdvCity}
+                    />
+                  </div>
+
                   {/* Province */}
                   <div className="flex-1 space-y-1">
                     <label className="text-xs font-medium">Province</label>
@@ -608,19 +646,22 @@ export default function CampaignToolbar({
                         setAdvProvince(val);
                         onDistrictFetch?.(val);
                         setAdvDistrict("");
+                        setAdvMunicipality("");
                       }}
                     >
                       {provinces.map((p) => (
                         <SelectItem
-                          key={p.id || p.province_id}
-                          value={p.id || p.province_id}
+                          key={p._id}
                         >
                           {p.name}
                         </SelectItem>
                       ))}
                     </Select>
                   </div>
+                </div>
 
+                {/* District and Municipality */}
+                <div className="flex gap-4">
                   {/* District */}
                   <div className="flex-1">
                     <label className="text-xs font-medium">District</label>
@@ -633,14 +674,40 @@ export default function CampaignToolbar({
                       selectedKeys={advDistrict ? [advDistrict] : []}
                       size="sm"
                       variant="bordered"
-                      onChange={(e) => setAdvDistrict(e.target.value)}
+                      onChange={(e) => {
+                        setAdvDistrict(e.target.value);
+                        setAdvMunicipality("");
+                      }}
                     >
                       {districts.map((d) => (
                         <SelectItem
-                          key={d.id || d.district_id}
-                          value={d.id || d.district_id}
+                          key={d._id}
                         >
                           {d.name}
+                        </SelectItem>
+                      ))}
+                    </Select>
+                  </div>
+
+                  {/* Municipality */}
+                  <div className="flex-1">
+                    <label className="text-xs font-medium">Municipality</label>
+                    <Select
+                      className="h-9"
+                      classNames={{ trigger: "h-9 border-default-200" }}
+                      isDisabled={!advDistrict}
+                      placeholder="Pick a municipality"
+                      radius="md"
+                      selectedKeys={advMunicipality ? [advMunicipality] : []}
+                      size="sm"
+                      variant="bordered"
+                      onChange={(e) => setAdvMunicipality(e.target.value)}
+                    >
+                      {getMunicipalitiesForDistrict(advDistrict).map((m) => (
+                        <SelectItem
+                          key={m._id}
+                        >
+                          {m.name}
                         </SelectItem>
                       ))}
                     </Select>
@@ -700,6 +767,7 @@ export default function CampaignToolbar({
                   city: advCity || undefined,
                   province: advProvince || undefined,
                   district: advDistrict || undefined,
+                  municipality: advMunicipality || undefined,
                   requester: advOrganizer || undefined,
                   startDate: advDateRange?.start?.toString(),
                   endDate: advDateRange?.end?.toString(),

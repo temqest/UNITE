@@ -661,7 +661,7 @@ export const CreateTrainingEventModal: React.FC<
                         radius="md"
                         size="sm"
                         type="text"
-                        value={name || "System Admin"}
+                        value={"No coordinators available"}
                         variant="bordered"
                       />
                     );
@@ -725,7 +725,7 @@ export const CreateTrainingEventModal: React.FC<
                 );
 
                 if (isStakeholder) {
-                  const name =
+                  const fullName =
                     `${user?.firstName || user?.First_Name || ""} ${user?.lastName || user?.Last_Name || ""}`.trim();
 
                   return (
@@ -737,7 +737,7 @@ export const CreateTrainingEventModal: React.FC<
                       radius="md"
                       size="sm"
                       type="text"
-                      value={name || "Stakeholder"}
+                      value={fullName || "Stakeholder"}
                       variant="bordered"
                     />
                   );
@@ -1692,7 +1692,7 @@ export const CreateBloodDriveEventModal: React.FC<
                 );
 
                 if (isStakeholder) {
-                  const name =
+                  const fullName =
                     `${user?.firstName || user?.First_Name || ""} ${user?.lastName || user?.Last_Name || ""}`.trim();
 
                   return (
@@ -1704,7 +1704,7 @@ export const CreateBloodDriveEventModal: React.FC<
                       radius="md"
                       size="sm"
                       type="text"
-                      value={name || "Stakeholder"}
+                      value={fullName || "Stakeholder"}
                       variant="bordered"
                     />
                   );
@@ -2644,7 +2644,7 @@ export const CreateAdvocacyEventModal: React.FC<
                 );
 
                 if (isStakeholder) {
-                  const name =
+                  const fullName =
                     `${user?.firstName || user?.First_Name || ""} ${user?.lastName || user?.Last_Name || ""}`.trim();
 
                   return (
@@ -2656,7 +2656,7 @@ export const CreateAdvocacyEventModal: React.FC<
                       radius="md"
                       size="sm"
                       type="text"
-                      value={name || "Stakeholder"}
+                      value={fullName || "Stakeholder"}
                       variant="bordered"
                     />
                   );

@@ -28,7 +28,7 @@ export default function CampaignPage() {
 
   const { setIsLoading } = useLoading();
 
-  const { locations } = useLocations();
+  const { locations, getDistrictsForProvince, getMunicipalitiesForDistrict, getAllProvinces, getAllMunicipalities } = useLocations();
 
   useEffect(() => {
     if (!selectedDate) setSelectedDate(new Date());
@@ -51,12 +51,14 @@ export default function CampaignPage() {
     endDate?: string;
     province?: string;
     district?: string;
+    municipality?: string;
   } | null>(null);
   const [advancedFilter, setAdvancedFilter] = useState<{
     start?: string;
     end?: string;
     title?: string;
     requester?: string;
+    municipality?: string;
   }>({});
   const [errorModalOpen, setErrorModalOpen] = useState(false);
   const [errorModalMessage, setErrorModalMessage] = useState("");
@@ -78,13 +80,18 @@ export default function CampaignPage() {
 
   const [provinces, setProvinces] = useState<any[]>([]);
   const [districts, setDistricts] = useState<any[]>([]);
+  const [municipalities, setMunicipalities] = useState<any[]>([]);
 
   useEffect(() => {
-    setProvinces(Object.values(locations.provinces));
-  }, [locations.provinces]);
+    setProvinces(getAllProvinces());
+  }, [getAllProvinces]);
+
+  useEffect(() => {
+    setMunicipalities(getAllMunicipalities());
+  }, [getAllMunicipalities]);
 
   const fetchDistricts = async (provinceId: number | string) => {
-    const districtsForProvince = Object.values(locations.districts).filter(d => d.province === provinceId);
+    const districtsForProvince = getDistrictsForProvince(provinceId.toString());
     setDistricts(districtsForProvince);
   };
 
@@ -970,6 +977,16 @@ export default function CampaignPage() {
 
         if (evDId && evDId !== dId) return false;
       }
+
+      // Municipality
+      if (quickFilter.municipality) {
+        const mId = String(quickFilter.municipality);
+        const evMId = String(
+          ev.Municipality_ID || ev.municipality_id || ev.municipalityId || "",
+        );
+
+        if (evMId && evMId !== mId) return false;
+      }
     }
 
     // Search query (global search box) - match title or requester or coordinator
@@ -1097,6 +1114,16 @@ export default function CampaignPage() {
           // ignore malformed date filter
         }
       }
+
+      // Municipality
+      if (advancedFilter.municipality) {
+        const mId = String(advancedFilter.municipality);
+        const evMId = String(
+          ev.Municipality_ID || ev.municipality_id || ev.municipalityId || "",
+        );
+
+        if (evMId && evMId !== mId) return false;
+      }
     }
 
     return true;
@@ -1148,6 +1175,7 @@ export default function CampaignPage() {
         onPageChange={setCurrentPage}
         districts={districts}
         provinces={provinces}
+        municipalities={municipalities}
         onDistrictFetch={fetchDistricts}
         onQuickFilter={handleQuickFilter}
         onTabChange={handleTabChange}

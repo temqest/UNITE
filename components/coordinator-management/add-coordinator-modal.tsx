@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
+import { useLocations } from "../locations-provider";
 import { Persons as Users, Eye, EyeSlash as EyeOff } from "@gravity-ui/icons";
 import { X } from "lucide-react";
 import {
@@ -41,6 +42,7 @@ export default function AddCoordinatorModal({
   onSubmit,
   isSubmitting = false,
 }: AddCoordinatorModalProps) {
+  const { getAllProvinces, getDistrictsForProvince } = useLocations();
   const [selectedProvince, setSelectedProvince] = useState<string>("")
   const [provinces, setProvinces] = useState<any[]>([])
   const [provincesLoading, setProvincesLoading] = useState(false)
@@ -88,107 +90,25 @@ export default function AddCoordinatorModal({
     onSubmit(data)
   }
 
-  // Fetch provinces on mount
+  // Load provinces on mount
   useEffect(() => {
-    const fetchProvinces = async () => {
-      setProvincesLoading(true)
-      setProvincesError(null)
-      try {
-        const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "")
-        const url = base ? `${base}/api/locations/provinces` : `/api/locations/provinces`
-        let token = null
+    const allProvinces = getAllProvinces();
+    setProvinces(allProvinces.map(p => ({ id: p._id, name: p.name })));
+    setProvincesLoading(false);
+  }, [getAllProvinces]);
 
-        try {
-          token = localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token")
-        } catch (e) {
-          token = null
-        }
-        const headers: any = {}
-
-        if (token) headers["Authorization"] = `Bearer ${token}`
-
-        const res = await fetch(url, { headers })
-        const bodyText = await res.text()
-        let body: any = null
-
-        try {
-          body = bodyText ? JSON.parse(bodyText) : null
-        } catch {
-          throw new Error("Invalid JSON from provinces endpoint")
-        }
-        if (!res.ok) throw new Error(body?.message || `Failed to fetch provinces (status ${res.status})`)
-        const items = body.data || body.provinces || []
-        const normalized = items.map((p: any) => ({
-          id: p._id || p.id || p._doc?._id || p.id,
-          name: p.name || p.Name || p.Province_Name || p.Province_Name,
-        }))
-
-        setProvinces(normalized.filter(Boolean))
-      } catch (err: any) {
-        setProvincesError(err.message || "Failed to load provinces")
-      } finally {
-        setProvincesLoading(false)
-      }
-    }
-
-    fetchProvinces()
-  }, [])
-
-  // Fetch districts for selected province
+  // Load districts for selected province
   useEffect(() => {
     if (!selectedProvince) {
-      setDistricts([])
-      setSelectedDistrictId("")
-      return
+      setDistricts([]);
+      setSelectedDistrictId("");
+      return;
     }
 
-    const fetchDistricts = async () => {
-      setDistrictsLoading(true)
-      setDistrictsError(null)
-      try {
-        const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "")
-        const url = base
-          ? `${base}/api/locations/provinces/${encodeURIComponent(selectedProvince)}/districts?limit=1000`
-          : `/api/locations/provinces/${encodeURIComponent(selectedProvince)}/districts?limit=1000`
-
-        let token = null
-
-        try {
-          token = localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token")
-        } catch (e) {
-          token = null
-        }
-
-        const headers: any = {}
-
-        if (token) headers["Authorization"] = `Bearer ${token}`
-
-        const res = await fetch(url, { headers })
-        const bodyText = await res.text()
-        let body: any = null
-
-        try {
-          body = bodyText ? JSON.parse(bodyText) : null
-        } catch {
-          throw new Error("Invalid JSON from districts endpoint")
-        }
-        if (!res.ok) throw new Error(body?.message || `Failed to fetch districts (status ${res.status})`)
-        const items = body.data || body.districts || []
-        const normalized = items.map((d: any) => ({
-          id: d._id || d.id || d.District_ID,
-          name: d.name || d.Name || d.District_Name || d.District_Number,
-        }))
-
-        setDistricts(normalized.filter(Boolean))
-      } catch (err: any) {
-        setDistrictsError(err.message || "Failed to load districts")
-      } finally {
-        setDistrictsLoading(false)
-      }
-    }
-
-    fetchDistricts()
-  }, [selectedProvince])
+    const districtsForProvince = getDistrictsForProvince(selectedProvince);
+    setDistricts(districtsForProvince.map(d => ({ id: d._id, name: d.name })));
+    setDistrictsLoading(false);
+  }, [selectedProvince, getDistrictsForProvince]);
 
   return (
     <Modal
