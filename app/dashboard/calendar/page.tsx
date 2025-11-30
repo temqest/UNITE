@@ -23,6 +23,7 @@ import {
   DropdownSection,
   DropdownItem,
 } from "@heroui/dropdown";
+import { Tabs, Tab } from "@heroui/tabs";
 import { Button } from "@heroui/button";
 import {
   Modal,
@@ -39,8 +40,10 @@ import EditEventModal from "@/components/calendar/event-edit-modal";
 import EventManageStaffModal from "@/components/calendar/event-manage-staff-modal";
 import EventRescheduleModal from "@/components/calendar/event-reschedule-modal";
 import CalendarToolbar from "@/components/calendar/calendar-toolbar";
+import Topbar from "@/components/topbar";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getUserInfo } from "@/utils/getUserInfo";
+import { Menu } from "lucide-react";
 
 export default function CalendarPage() {
   const pathname = usePathname();
@@ -1743,102 +1746,38 @@ export default function CalendarPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-visible bg-white">
-      {/* Header */}
-      <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Calendar</h1>
-          
-          {/* Mobile Menu Button */}
-          <div className="sm:hidden flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <User
-                avatarProps={{
-                  src: "",
-                  size: "sm",
-                  className: "bg-orange-400 text-white",
-                }}
-                classNames={{
-                  base: "cursor-pointer",
-                  name: "font-semibold text-gray-900 text-sm",
-                  description: "text-gray-500 text-xs",
-                }}
-                description={currentUserEmail}
-                name={currentUserName}
-                onClick={() => {}}
-              />
-              <button
-                aria-label="User menu"
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-                onClick={() => {}}
-              >
-                <ChevronDown className="w-4 h-4 text-gray-400" />
-              </button>
-            </div>
-            <button
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors ml-4"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            >
-              <Menu className="w-5 h-5 text-gray-600" />
-            </button>
-          </div>
+      {/* Header: match campaign spacing */}
+      <div className="px-6 pt-6 pb-4">
+        <h1 className="text-2xl font-semibold">Calendar</h1>
+      </div>
 
-          {/* Desktop User Profile */}
-          <div className="hidden sm:flex items-center gap-3">
-            <User
-              avatarProps={{
-                src: "",
-                size: "md",
-                className: "bg-orange-400 text-white",
-              }}
-              classNames={{
-                base: "cursor-pointer",
-                name: "font-semibold text-gray-900 text-sm",
-                description: "text-gray-500 text-xs",
-              }}
-              description={currentUserEmail}
-              name={currentUserName}
-              onClick={() => {}}
-            />
-            <button
-              aria-label="User menu"
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-              onClick={() => {}}
-            >
-              <ChevronDown className="w-4 h-4 text-gray-400" />
-            </button>
-          </div>
-        </div>
+      <Topbar
+        userEmail={currentUserEmail}
+        userName={currentUserName}
+        onUserClick={() => {}}
+      />
 
-        {/* Toolbar */}
+      {/* Toolbar area with campaign padding */}
+      <div className="px-6 py-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
           {/* Left side - View Toggle and Date Navigation */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            {/* View Toggle */}
-            <div className="flex items-center bg-white border border-gray-300 rounded-lg overflow-hidden w-full sm:w-auto">
-              <button
-                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-sm font-medium flex items-center gap-2 transition-colors ${
-                  activeView === "week"
-                    ? "bg-gray-100 text-gray-900"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-                onClick={() => handleViewChange("week")}
-              >
-                <Calendar className="w-4 h-4" />
-                Week
-              </button>
-              <div className="w-px h-6 bg-gray-300" />
-              <button
-                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-sm font-medium flex items-center gap-2 transition-colors ${
-                  activeView === "month"
-                    ? "bg-gray-100 text-gray-900"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-                onClick={() => handleViewChange("month")}
-              >
-                <Calendar className="w-4 h-4" />
-                <span className="hidden xs:inline">Month</span>
-              </button>
-            </div>
+            {/* View Toggle: use campaign Tabs for consistent sizing */}
+            <Tabs
+              classNames={{
+                tabList: "bg-gray-100 p-1",
+                cursor: "bg-white shadow-sm",
+                tabContent: "group-data-[selected=true]:text-gray-900 text-xs font-medium",
+              }}
+              radius="md"
+              selectedKey={activeView}
+              size="sm"
+              variant="solid"
+              onSelectionChange={(key: React.Key) => handleViewChange(String(key))}
+            >
+              <Tab key="week" title="Week" />
+              <Tab key="month" title="Month" />
+            </Tabs>
 
             {/* Date Navigation */}
             <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">

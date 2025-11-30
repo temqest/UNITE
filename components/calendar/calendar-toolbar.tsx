@@ -156,10 +156,11 @@ export default function CalendarToolbar({
   return (
     <div className="flex items-center gap-2">
       <Button
+        className=" border-default-200 bg-white font-medium text-xs"
         radius="md"
         size="sm"
         startContent={<Download className="w-4 h-4" />}
-        variant="faded"
+        variant="bordered"
         onPress={onExport}
       >
         Export
@@ -168,11 +169,12 @@ export default function CalendarToolbar({
       <Dropdown>
         <DropdownTrigger>
           <Button
+            className=" border-default-200 bg-white font-medium text-xs"
             endContent={<ChevronDown className="w-4 h-4" />}
             radius="md"
             size="sm"
             startContent={<Filter className="w-4 h-4" />}
-            variant="faded"
+            variant="bordered"
           >
             Quick Filter
           </Button>
@@ -206,11 +208,12 @@ export default function CalendarToolbar({
       </Dropdown>
 
       <Button
+        className=" border-default-200 bg-white font-medium text-xs"
         endContent={<ChevronDown className="w-4 h-4" />}
         radius="md"
         size="sm"
         startContent={<SlidersHorizontal className="w-4 h-4" />}
-        variant="faded"
+        variant="bordered"
         onPress={() => setIsAdvancedModalOpen(true)}
       >
         Advanced Filter
