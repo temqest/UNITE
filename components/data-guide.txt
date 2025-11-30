@@ -1,0 +1,132 @@
+request:
+
+{
+  "_id": "692c44b65e529ddc0d781714",
+  "Category": "BloodDrive",
+  "Event_ID": "EVENT_1764508853632_x9qhxn8nz",
+  "Request_ID": "REQ_1764508853632_t3rag684i",
+  "Status": "pending-review",
+  "allowedActions": ["view"],
+  "canAccept": false,
+  "canAdminAction": false,
+  "canConfirm": false,
+  "canEdit": false,
+  "canManageStaff": false,
+  "canReject": false,
+  "canReschedule": false,
+  "canView": true,
+  "coordinator": {
+    "_id": "6925109453f5c5ec31e9c258",
+    "Coordinator_ID": "COORD_1764036755924_i16b747uh"
+  },
+  "createdAt": "2025-11-25T02:12:36.218Z",
+  "district": "691986faaf8419ed8d3f918c",
+  "province": "691986a9f35c252bde8b8654",
+  "staff": {
+    "First_Name": "Samuel",
+    "Last_Name": "Belen",
+    "Email": "sbelen@gbox.adnu.edu.ph"
+  },
+  "updatedAt": "2025-11-25T02:12:36.218Z",
+  "__v": 0,
+
+  "coordinator_id": "COORD_1764036755924_i16b747uh",
+  "createdAt_request": "2025-11-30T13:20:54.504Z",
+  "createdByName": "Samuel Belen",
+  "creator": {
+    "id": "ADMIN_1763280879714_toms7r2m5",
+    "role": "SystemAdmin",
+    "name": "Test Admin"
+  },
+  "decisionHistory": [],
+  "event": {
+    "_id": "692c44b55e529ddc0d781710",
+    "Event_ID": "EVENT_1764508853632_x9qhxn8nz",
+    "Event_Title": "chi"
+  },
+  "expiresAt": "2025-12-03T13:20:54.499Z",
+  "made_by_id": "ADMIN_1763280879714_toms7r2m5",
+  "made_by_role": "SystemAdmin",
+  "municipality": null,
+  "originalData": null,
+  "reviewDeadlineHours": 72,
+  "reviewSummary": "Test Admin requested a Blood Drive titled ‘chi’ on 2025-12-30 from 00:00–08:00. The event aims to reach a target donation of 123. Located at adasdas. Please review this request.",
+  "reviewer": {
+    "id": "COORD_1764036755924_i16b747uh",
+    "role": "Coordinator",
+    "name": "Samuel Belen",
+    "autoAssigned": true
+  },
+  "revision": {
+    "number": 1,
+    "supersedes": []
+  },
+  "stakeholder": null,
+  "stakeholderPresent": false,
+  "statusHistory": [
+    {
+      "status": "pending-review",
+      "changedAt": "2025-11-30T13:20:54.499Z"
+    }
+  ],
+  "summaryTemplate": "BloodDrive",
+  "updatedAt_request": "2025-11-30T13:20:54.504Z"
+}
+
+
+province:
+
+/** 
+* Paste one or more documents here
+*/
+{
+  "name": "Camarines Sur",
+  "createdAt": {
+    "$date": "2025-11-16T08:09:13.015Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-16T08:09:13.015Z"
+  },
+  "__v": 0
+}
+
+district:
+
+/** 
+* Paste one or more documents here
+*/
+{
+  "name": "District I",
+  "province": {
+    "$oid": "691986a9f35c252bde8b8654"
+  },
+  "createdAt": {
+    "$date": "2025-11-16T08:09:13.426Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-16T08:09:13.426Z"
+  },
+  "__v": 0
+}
+
+municipality:
+
+/** 
+* Paste one or more documents here
+*/
+{
+  "name": "Cabusao",
+  "district": {
+    "$oid": "691986a9f35c252bde8b865f"
+  },
+  "province": {
+    "$oid": "691986a9f35c252bde8b8654"
+  },
+  "createdAt": {
+    "$date": "2025-11-16T08:09:13.543Z"
+  },
+  "updatedAt": {
+    "$date": "2025-11-16T08:09:13.543Z"
+  },
+  "__v": 0
+}

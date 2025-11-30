@@ -43,6 +43,8 @@ import {
   deleteRequest as svcDeleteRequest,
 } from "./services/requestsService";
 
+import { useLocations } from "../locations-provider";
+
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 
 import {
@@ -118,114 +120,35 @@ const EventCard: React.FC<EventCardProps> = ({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [successModal, setSuccessModal] = useState(false);
   const [fullRequest, setFullRequest] = useState<any>(null);
-  const [resolvedGeo, setResolvedGeo] = useState<any>({});
 
-  // Try to resolve district/province names for the card itself (best-effort)
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const pickId =
-          (request && (request as any).district) || district || null;
+  const { getDistrictName, getProvinceName, locations } = useLocations();
 
-        const isObjectId = (s: any) =>
-          typeof s === "string" && /^[a-f0-9]{24}$/i.test(s);
+  // Resolve district and province names using the centralized provider
+  const resolvedGeo = useMemo(() => {
+    const pickId =
+      (request && (request as any).district) || district || null;
 
-        if (!pickId) return;
+    if (!pickId) return { district: null, province: null };
 
-        // If it's already a friendly name (not an ObjectId), use it
-        if (!isObjectId(pickId)) {
-          setResolvedGeo((p: any) => ({ ...(p || {}), district: pickId }));
-          return;
-        }
+    // If it's already a friendly name (not an ObjectId), use it
+    const isObjectId = (s: any) =>
+      typeof s === "string" && /^[a-f0-9]{24}$/i.test(s);
 
-        const token =
-          typeof window !== "undefined"
-            ? localStorage.getItem("unite_token") ||
-              sessionStorage.getItem("unite_token")
-            : null;
-        const headers: any = { "Content-Type": "application/json" };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (!isObjectId(pickId)) {
+      return { district: pickId, province: null };
+    }
 
-        // Try direct lookup
-        try {
-          const res = await fetch(
-            `${API_BASE}/api/districts/${encodeURIComponent(pickId)}`,
-            { headers, credentials: token ? undefined : "include" },
-          );
-          if (res && res.ok) {
-            const body = await res.json().catch(() => null);
-            const data = body?.data || body?.district || body || null;
-            if (data) {
-              const districtName =
-                data?.District_Name ||
-                data?.DistrictName ||
-                data?.name ||
-                data?.Name ||
-                null;
-              const provinceName =
-                data?.Province_Name ||
-                data?.ProvinceName ||
-                data?.province ||
-                data?.Province ||
-                null;
-              setResolvedGeo((p: any) => ({
-                ...(p || {}),
-                district: districtName || null,
-                province: provinceName || null,
-              }));
-              return;
-            }
-          }
-        } catch (e) {
-          // ignore
-        }
+    // Use provider lookups
+    const districtName = getDistrictName(pickId);
+    // For province, we need to find the district's province
+    const districtObj = Object.values(locations.districts).find(d => d._id === pickId);
+    const provinceName = districtObj ? getProvinceName(districtObj.province) : null;
 
-        // Fallback: list and match by _id or District_ID
-        try {
-          const listRes = await fetch(
-            `${API_BASE}/api/districts?page=1&limit=1000`,
-            { headers, credentials: token ? undefined : "include" },
-          );
-          if (listRes && listRes.ok) {
-            const listBody = await listRes.json().catch(() => null);
-            const list =
-              listBody?.data || listBody?.districts || listBody || [];
-            if (Array.isArray(list) && list.length) {
-              const match = list.find(
-                (d: any) =>
-                  String(d._id) === String(pickId) ||
-                  String(d.District_ID) === String(pickId),
-              );
-              if (match) {
-                const districtName =
-                  match?.District_Name ||
-                  match?.DistrictName ||
-                  match?.name ||
-                  match?.Name ||
-                  null;
-                const provinceName =
-                  match?.Province_Name ||
-                  match?.ProvinceName ||
-                  match?.province ||
-                  match?.Province ||
-                  null;
-                setResolvedGeo((p: any) => ({
-                  ...(p || {}),
-                  district: districtName || null,
-                  province: provinceName || null,
-                }));
-                return;
-              }
-            }
-          }
-        } catch (e) {
-          // ignore
-        }
-      } catch (e) {
-        // ignore overall
-      }
-    })();
-  }, [district, request]);
+    return {
+      district: districtName !== "Unknown District" ? districtName : null,
+      province: provinceName !== "Unknown Province" ? provinceName : null,
+    };
+  }, [request, district, getDistrictName, getProvinceName, locations.districts]);
 
   const resolvedRequest =
     fullRequest || request || (request && (request as any).event) || null;
@@ -767,134 +690,7 @@ const EventCard: React.FC<EventCardProps> = ({
       }
 
       setFullRequest(finalRequest || r);
-      // Try to resolve district/province names when opening modal
-      (async () => {
-        try {
-          const rr = finalRequest || r || {};
-          const pickId =
-            rr?.district ||
-            rr?.District ||
-            rr?.districtId ||
-            rr?.District_ID ||
-            rr?.district_id ||
-            null;
-
-          const isObjectId = (s: any) =>
-            typeof s === "string" && /^[a-f0-9]{24}$/i.test(s);
-
-          if (pickId && isObjectId(pickId)) {
-            try {
-              const token =
-                typeof window !== "undefined"
-                  ? localStorage.getItem("unite_token") ||
-                    sessionStorage.getItem("unite_token")
-                  : null;
-              const headers: any = { "Content-Type": "application/json" };
-              if (token) headers["Authorization"] = `Bearer ${token}`;
-
-              // First try the direct lookup (this endpoint expects `District_ID` normally)
-              let foundDistrict: any = null;
-              try {
-                const res = await fetch(
-                  `${API_BASE}/api/districts/${encodeURIComponent(pickId)}`,
-                  { headers, credentials: token ? undefined : "include" },
-                );
-
-                if (res && res.ok) {
-                  const body = await res.json().catch(() => null);
-                  const data = body?.data || body?.district || body;
-                  foundDistrict = data || null;
-                }
-              } catch (e) {
-                // ignore direct lookup failure and try fallback
-              }
-
-              // Fallback: list districts (large limit) and search by Mongo _id
-              if (!foundDistrict) {
-                try {
-                  const listRes = await fetch(
-                    `${API_BASE}/api/districts?page=1&limit=1000`,
-                    {
-                      headers,
-                      credentials: token ? undefined : "include",
-                    },
-                  );
-
-                  if (listRes && listRes.ok) {
-                    const listBody = await listRes.json().catch(() => null);
-                    const list =
-                      listBody?.data || listBody?.districts || listBody || [];
-                    if (Array.isArray(list) && list.length) {
-                      const match = list.find(
-                        (d: any) =>
-                          String(d._id) === String(pickId) ||
-                          String(d.District_ID) === String(pickId),
-                      );
-                      if (match) foundDistrict = match;
-                    }
-                  }
-                } catch (e) {
-                  // ignore
-                }
-              }
-
-              if (foundDistrict) {
-                const districtName =
-                  foundDistrict?.District_Name ||
-                  foundDistrict?.DistrictName ||
-                  foundDistrict?.name ||
-                  foundDistrict?.Name ||
-                  null;
-                let provinceName =
-                  foundDistrict?.Province_Name ||
-                  foundDistrict?.ProvinceName ||
-                  foundDistrict?.province ||
-                  foundDistrict?.Province ||
-                  null;
-
-                // If provinceName looks like a Mongo _id, try to resolve via provinces list
-                const isObjectId = (s: any) =>
-                  typeof s === "string" && /^[a-f0-9]{24}$/i.test(s);
-                if (provinceName && isObjectId(provinceName)) {
-                  try {
-                    const provRes = await fetch(
-                      `${API_BASE}/api/locations/provinces`,
-                      { headers, credentials: token ? undefined : "include" },
-                    );
-                    if (provRes && provRes.ok) {
-                      const provBody = await provRes.json().catch(() => null);
-                      const provList = provBody?.data || provBody || [];
-                      if (Array.isArray(provList)) {
-                        const matchProv = provList.find(
-                          (p: any) =>
-                            String(p._id) === String(provinceName) ||
-                            String(p.Province_ID) === String(provinceName),
-                        );
-                        if (matchProv)
-                          provinceName =
-                            matchProv?.name ||
-                            matchProv?.Province_Name ||
-                            matchProv?.ProvinceName ||
-                            null;
-                      }
-                    }
-                  } catch (e) {
-                    // ignore
-                  }
-                }
-
-                setResolvedGeo((prev: any) => ({
-                  ...prev,
-                  district: districtName || null,
-                  province: provinceName || null,
-                }));
-              }
-            } catch (e) {
-              // ignore fetch errors
-            }
-          }
-        } catch (e) {}
-      })();
+      // Geo resolution is now handled by useMemo above
 
       setViewOpen(true);
     } catch (e) {

@@ -14,6 +14,7 @@ import EventViewModal from "@/components/campaign/event-view-modal";
 import EditEventModal from "@/components/campaign/event-edit-modal";
 
 import { useLoading } from "@/components/loading-overlay";
+import { useLocations } from "../../../components/locations-provider";
 
 /**
  * Campaign Page Component
@@ -26,6 +27,8 @@ export default function CampaignPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   const { setIsLoading } = useLoading();
+
+  const { locations } = useLocations();
 
   useEffect(() => {
     if (!selectedDate) setSelectedDate(new Date());
@@ -77,32 +80,12 @@ export default function CampaignPage() {
   const [districts, setDistricts] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetchProvinces = async () => {
-      try {
-        const token = localStorage.getItem("unite_token");
-        const res = await fetch(`${API_URL}/api/loc/provinces`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const json = await res.json();
-        if (json.success) setProvinces(json.data);
-      } catch (error) {
-        console.error("Failed to fetch provinces:", error);
-      }
-    };
-    fetchProvinces();
-  }, [API_URL]);
+    setProvinces(Object.values(locations.provinces));
+  }, [locations.provinces]);
 
   const fetchDistricts = async (provinceId: number | string) => {
-    try {
-      const token = localStorage.getItem("unite_token");
-      const res = await fetch(`${API_URL}/api/loc/districts/${provinceId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = await res.json();
-      if (json.success) setDistricts(json.data);
-    } catch (error) {
-      console.error("Failed to fetch districts:", error);
-    }
+    const districtsForProvince = Object.values(locations.districts).filter(d => d.province === provinceId);
+    setDistricts(districtsForProvince);
   };
 
   // Helper to parse a variety of date shapes (ISO string, ms timestamp,
