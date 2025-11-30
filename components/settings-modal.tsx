@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Modal, ModalContent, ModalHeader, ModalBody } from "@heroui/modal";
 import { Button } from "@heroui/button";
 import { Switch } from "@heroui/switch";
@@ -29,6 +30,7 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+  const router = useRouter();
   const [settings, setSettings] = useState<Settings>({
     notificationsEnabled: true,
     maxPendingRequests: 100,
@@ -66,6 +68,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('unite_token');
+    sessionStorage.removeItem('unite_token');
+    onClose();
+    router.push('/');
   };
 
   const updateSettings = async (updates: Partial<Settings>) => {
@@ -163,6 +172,16 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       General
                     </a>
                   </nav>
+                  <div className="mt-4">
+                    <Button
+                      color="danger"
+                      variant="light"
+                      onClick={handleLogout}
+                      className="w-full"
+                    >
+                      Log Out
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Right Content */}
