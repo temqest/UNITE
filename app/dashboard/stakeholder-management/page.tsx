@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 
 import { getUserInfo } from "../../../utils/getUserInfo";
 
@@ -309,11 +308,11 @@ export default function StakeholderManagement() {
   };
 
   const handleUserClick = () => {
-    // no-op (user menu handled elsewhere)
+    debug("User profile clicked");
   };
 
   const handleExport = () => {
-    // export handler placeholder
+    debug("Exporting data...");
   };
 
   // generate-code functionality removed from toolbar per new design
@@ -452,7 +451,25 @@ export default function StakeholderManagement() {
       setUserDistrictId(uid || null);
       setOpenUserDistrictId(uid || null);
       // Include both centralized getUserInfo and raw parsed object for diagnostics
-      // removed debug logs for production
+      let infoForDebug = null;
+
+      try {
+        infoForDebug = getUserInfo();
+      } catch (e) {
+        infoForDebug = null;
+      }
+      debug(
+        "[StakeholderManagement] handleAddStakeholder getUserInfo():",
+        infoForDebug,
+      );
+      debug(
+        "[StakeholderManagement] handleAddStakeholder parsed fallback object:",
+        parsed,
+      );
+      debug(
+        "[StakeholderManagement] handleAddStakeholder computed userDistrictId:",
+        uid,
+      );
     } catch (e) {
       // ignore
     }
@@ -841,7 +858,32 @@ export default function StakeholderManagement() {
         : `/api/stakeholders?${params.toString()}`;
 
       // Debug: log computed request details so we can verify coordinator filtering
-      // removed verbose request debug logging
+      try {
+        debug("[fetchStakeholders] request debug", {
+          userInfo:
+            userInfo && Object.keys(userInfo).length
+              ? {
+                  displayName: userInfo.displayName,
+                  role: userInfo.role,
+                  isAdmin: userInfo.isAdmin,
+                }
+              : null,
+          storedUserPreview: user
+            ? {
+                id: user.id || user.ID || user.Stakeholder_ID || null,
+                staffType:
+                  user.StaffType || user.staff_type || user.staffType || null,
+                role_data: user.role_data || null,
+              }
+            : null,
+          canManageStakeholders,
+          fetchIsCoordinator,
+          userDistrictId,
+          params: params.toString(),
+          url,
+          tokenPresent: !!token,
+        });
+      } catch (e) {}
 
       const headers: any = {};
 
@@ -872,11 +914,8 @@ export default function StakeholderManagement() {
       try {
         json = text ? JSON.parse(text) : null;
       } catch (parseErr) {
-        // If response is not valid JSON, do NOT expose raw server HTML or
-        // internal route messages to the end user. Keep a debug log for
-        // developers and throw a sanitized message instead.
-        const snippet = text ? String(text).slice(0, 300) : "";
-        // removed detailed warn output; snippet kept out of UI
+        // If response is not valid JSON, include a short snippet in the error to help debugging
+        const snippet = text.slice(0, 300);
 
         throw new Error(
           "Failed to fetch stakeholders (unexpected server response)",
@@ -895,7 +934,32 @@ export default function StakeholderManagement() {
       const items = json.data || json.stakeholders || [];
 
       // Debug: log which district IDs are present in the response
-      // removed debug logging for response districts
+      try {
+        const returnedDistricts = Array.from(
+          new Set(
+            items.map(
+              (it: any) =>
+                it.District_ID ||
+                it.district_id ||
+                it.DistrictId ||
+                it.districtId ||
+                it.District ||
+                it.District_Name ||
+                it.District_Name ||
+                "",
+            ),
+          ),
+        ).filter(Boolean);
+
+        debug(
+          "[fetchStakeholders] response districts:",
+          returnedDistricts,
+          "itemsCount:",
+          items.length,
+        );
+      } catch (e) {
+        /* ignore */
+      }
       const mapped = items.map((s: any) => {
         // Build full name supporting both legacy (First_Name) and normalized (firstName) keys
         const fullName = [
@@ -1571,10 +1635,16 @@ export default function StakeholderManagement() {
             raw: s,
           }));
 
-          // removed diagnostic warn output
+          warn(
+            "[fetchStakeholders] stakeholders missing organization (diagnostics):",
+            diag,
+          );
         }
         // Also log the first few mapped items for inspection
-        // removed mapped sample debug output
+        debug(
+          "[fetchStakeholders] mapped sample (first 5):",
+          mapped.slice(0, 5),
+        );
 
         // Fallback: if some mapped items still have empty organization, attempt to fetch
         // full stakeholder details for those items (limited to first 10) — some list
