@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@heroui/button";
 import { Link } from "@heroui/link";
 import { Eye, EyeSlash, Check } from "@gravity-ui/icons";
+import { Select, SelectItem } from "@heroui/select";
 
 export default function SignUp() {
   const router = useRouter();
@@ -59,7 +60,8 @@ export default function SignUp() {
       return !!(
         formData.First_Name.trim() &&
         formData.Last_Name.trim() &&
-        formData.Phone_Number.trim()
+        formData.Phone_Number.trim() &&
+        formData.Email.trim()
       );
     }
     if (step === 1) {
@@ -187,6 +189,8 @@ export default function SignUp() {
       setCodeValidated(true);
       setShowSuccessAnim(true);
       setTimeout(() => setShowSuccessAnim(false), 1400);
+      // advance to final step (thank you) after successful verification
+      setTimeout(() => setStep(4), 600);
     } catch (err: any) {
       setError(err?.message || "Invalid code");
       setCodeValidated(false);
@@ -202,28 +206,27 @@ export default function SignUp() {
       setError("Please complete required fields for this step.");
       return;
     }
-    if (step < 3) {
+    // advance through steps; final step index is 4 (thank you)
+    if (step < 4) {
       setDirection("next");
       setStep((s) => s + 1);
       return;
     }
-    // Email verification step - just show that email was sent
-    if (!emailSent) {
-      setError("Please send the verification email first.");
-      return;
-    }
+    // final action on step 4: show success modal
     setRegistrationSuccess(true);
     setShowModal(true);
   };
 
   return (
     <div className="w-full max-w-[400px] mx-auto">
-      <div className="space-y-1 mb-8">
-        <h1 className="text-2xl font-semibold text-danger-600">Sign Up</h1>
-        <p className="text-sm text-gray-600">
-          Enter your details to get started
-        </p>
-      </div>
+      {step < 3 && (
+        <div className="space-y-1 mb-8">
+          <h1 className="text-2xl font-semibold text-danger-600">Sign Up</h1>
+          <p className="text-sm text-gray-600">
+            Enter your details to get started
+          </p>
+        </div>
+      )}
       <form className="space-y-4" onSubmit={handleFormSubmit}>
         <div className="relative min-h-[380px] pb-40">
           {/* Step boxes are absolutely positioned and animated via translate + opacity */}
@@ -236,6 +239,7 @@ export default function SignUp() {
               <div>
                 <label
                   className="text-sm font-medium block mb-1"
+
                   htmlFor="first-name"
                 >
                   First name <span className="text-danger-500">*</span>
@@ -289,6 +293,21 @@ export default function SignUp() {
                   onChange={(e) => update({ Phone_Number: e.target.value })}
                 />
               </div>
+              <div>
+                <label
+                  className="text-sm font-medium block mb-1"
+                  htmlFor="email"
+                >
+                  Email <span className="text-danger-500">*</span>
+                </label>
+                <input
+                  className={`${inputClass} w-full`}
+                  id="email"
+                  type="email"
+                  value={formData.Email}
+                  onChange={(e) => update({ Email: e.target.value })}
+                />
+              </div>
             </div>
           </div>
 
@@ -298,69 +317,63 @@ export default function SignUp() {
           >
             <div className="space-y-3 pb-20">
               <div>
-                <label
-                  className="text-sm font-medium block mb-1"
-                  htmlFor="province"
-                >
-                  Province <span className="text-danger-500">*</span>
-                </label>
-                <select
-                  className={`${inputClass} w-full`}
+                <label className="text-sm font-medium block mb-1" htmlFor="province">Province <span className="text-danger-500">*</span></label>
+                <Select
                   id="province"
-                  value={formData.Province}
-                  onChange={(e) => update({ Province: e.target.value })}
+                  className="h-10"
+                  placeholder="Select Province"
+                  selectedKeys={formData.Province ? [formData.Province] : []}
+                  radius="md"
+                  size="sm"
+                  variant="bordered"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    update({ Province: val, District: "", Municipality: "" });
+                  }}
                 >
-                  <option value="">Select Province</option>
                   {provinces.map((prov) => (
-                    <option key={prov._id} value={prov._id}>
-                      {prov.name}
-                    </option>
+                    <SelectItem key={prov._id}>{prov.name}</SelectItem>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
-                <label
-                  className="text-sm font-medium block mb-1"
-                  htmlFor="district"
-                >
-                  District <span className="text-danger-500">*</span>
-                </label>
-                <select
-                  className={`${inputClass} w-full`}
+                <label className="text-sm font-medium block mb-1" htmlFor="district">District <span className="text-danger-500">*</span></label>
+                <Select
                   id="district"
-                  value={formData.District}
-                  onChange={(e) => update({ District: e.target.value })}
-                  disabled={!formData.Province}
+                  className="h-10"
+                  placeholder="Select District"
+                  selectedKeys={formData.District ? [formData.District] : []}
+                  radius="md"
+                  size="sm"
+                  variant="bordered"
+                  isDisabled={!formData.Province}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    update({ District: val, Municipality: "" });
+                  }}
                 >
-                  <option value="">Select District</option>
                   {districts.map((dist) => (
-                    <option key={dist._id} value={dist._id}>
-                      {dist.name}
-                    </option>
+                    <SelectItem key={dist._id}>{dist.name}</SelectItem>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
-                <label
-                  className="text-sm font-medium block mb-1"
-                  htmlFor="municipality"
-                >
-                  Municipality <span className="text-danger-500">*</span>
-                </label>
-                <select
-                  className={`${inputClass} w-full`}
+                <label className="text-sm font-medium block mb-1" htmlFor="municipality">Municipality <span className="text-danger-500">*</span></label>
+                <Select
                   id="municipality"
-                  value={formData.Municipality}
+                  className="h-10"
+                  placeholder="Select Municipality"
+                  selectedKeys={formData.Municipality ? [formData.Municipality] : []}
+                  radius="md"
+                  size="sm"
+                  variant="bordered"
+                  isDisabled={!formData.District}
                   onChange={(e) => update({ Municipality: e.target.value })}
-                  disabled={!formData.District}
                 >
-                  <option value="">Select Municipality</option>
                   {municipalities.map((mun) => (
-                    <option key={mun._id} value={mun._id}>
-                      {mun.name}
-                    </option>
+                    <SelectItem key={mun._id}>{mun.name}</SelectItem>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
                 <label
@@ -378,20 +391,7 @@ export default function SignUp() {
                   }
                 />
               </div>
-              <div>
-                <label
-                  className="text-sm font-medium block mb-1"
-                  htmlFor="field"
-                >
-                  Field
-                </label>
-                <input
-                  className={`${inputClass} w-full`}
-                  id="field"
-                  value={formData.Field}
-                  onChange={(e) => update({ Field: e.target.value })}
-                />
-              </div>
+              {/* removed Field input as requested */}
             </div>
           </div>
 
@@ -471,84 +471,129 @@ export default function SignUp() {
           </div>
 
           {/* Step 4 - Email Verification */}
-          <div
-            className={`absolute inset-0 ${step === 3 ? "block" : "hidden"}`}
-          >
+          <div className={`absolute inset-0 ${step === 3 ? "block" : "hidden"}`}>
             <div className="pb-20">
-              <div className="space-y-3">
-                <div>
-                  <label
-                    className="text-sm font-medium block mb-1"
-                    htmlFor="email"
-                  >
-                    Email <span className="text-danger-500">*</span>
-                  </label>
-                  <input
-                    className={`${inputClass} w-full`}
-                    id="email"
-                    type="email"
-                    value={formData.Email}
-                    onChange={(e) => {
-                      update({ Email: e.target.value });
-                      setEmailSent(false);
-                      setEmailVerified(false);
-                      setCodeValidated(false);
+              <div className="space-y-4">
+                <h2 className="text-3xl font-semibold text-danger-600">Enter your code</h2>
+                <p className="text-sm text-gray-500">Enter the code sent to your email {formData.Email ? formData.Email.replace(/(.{1})(.*)(@.*)/, (m,p1,p2,p3)=> p1 + '*'.repeat(Math.max(0,p2.length)) + p3) : ''}</p>
+
+                <div className="mt-4 p-4 bg-white rounded-md">
+                  <h3 className="text-sm font-medium text-gray-900">Verify account</h3>
+                  <p className="text-xs text-gray-500 mt-1">We have sent a code to {formData.Email ? formData.Email.replace(/(.{1})(.*)(@.*)/, (m,p1,p2,p3)=> p1 + '*'.repeat(Math.max(0,p2.length)) + p3) : ''}</p>
+
+                  <div className="mt-4 flex items-center justify-center gap-3">
+                    {Array.from({ length: 6 }).map((_, i) => {
+                      const digit = formData.Verification_Code?.[i] || "";
+                      return (
+                        <div key={i} className="flex items-center">
+                          <input
+                            className="w-12 h-12 text-center border border-gray-200 rounded-md text-lg bg-white"
+                            maxLength={1}
+                            value={digit}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/[^0-9]/g, "");
+                              const arr = (formData.Verification_Code || "").padEnd(6, "").split("").slice(0,6);
+                              arr[i] = v ? v[0] : "";
+                              update({ Verification_Code: arr.join("").trim() });
+                              if (v && i < 5) {
+                                const next = document.getElementById(`code-${i+1}`) as HTMLInputElement | null;
+                                next?.focus();
+                              }
+                            }}
+                            onPaste={(e: React.ClipboardEvent<HTMLInputElement>) => {
+                              e.preventDefault();
+                              const paste = e.clipboardData?.getData("text") || "";
+                              const digits = paste.replace(/\D/g, "");
+                              if (!digits) return;
+                              // populate starting at current index
+                              const arr = (formData.Verification_Code || "").padEnd(6, "").split("").slice(0,6);
+                              for (let j = 0; j < digits.length && i + j < 6; j++) {
+                                arr[i + j] = digits[j];
+                              }
+                              const newCode = arr.join("").trim();
+                              update({ Verification_Code: newCode });
+                              const lastFilled = Math.min(5, i + digits.length - 1);
+                              setTimeout(() => {
+                                const el = document.getElementById(`code-${lastFilled}`) as HTMLInputElement | null;
+                                el?.focus();
+                              }, 0);
+                            }}
+                            id={`code-${i}`}
+                            onKeyDown={(e) => {
+                              if (e.key === "Backspace") {
+                                const arr = (formData.Verification_Code || "").padEnd(6, "").split("").slice(0,6);
+                                arr[i] = "";
+                                update({ Verification_Code: arr.join("").trim() });
+                                if (i > 0) {
+                                  const prev = document.getElementById(`code-${i-1}`) as HTMLInputElement | null;
+                                  prev?.focus();
+                                }
+                              }
+                            }}
+                          />
+                          {i === 2 && <div className="mx-2 text-xl text-gray-400">-</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-4 text-sm text-gray-600 text-center">
+                    <span>Didn't receive a code? </span>
+                    <button
+                      className="text-sm font-medium text-danger-600 underline"
+                      type="button"
+                      onClick={() => {
+                        setError(null);
+                        sendVerificationCode();
+                      }}
+                      disabled={validatingCode}
+                    >
+                      Resend
+                    </button>
+                  </div>
+
+                  <div className="mt-6">
+                    <button
+                      className="w-full bg-danger-600 hover:bg-danger-700 text-white py-3 rounded-full"
+                      type="button"
+                      onClick={() => {
+                        if (!emailSent) sendVerificationCode();
+                        else verifyCode();
+                      }}
+                      disabled={!formData.Email.trim() || validatingCode || (emailSent && emailVerified)}
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        {validatingCode && (
+                          <span className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+                        )}
+                        {validatingCode ? (emailSent ? "Verifying..." : "Sending...") : !emailSent ? "Send Verification Code" : emailVerified ? "Code Verified" : "Verify"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 5 (index 4) - Thank you / final step shown after verification */}
+          <div className={`absolute inset-0 ${step === 4 ? "block" : "hidden"}`}>
+            <div className="flex items-center justify-center min-h-[380px]">
+              <div className="max-w-md w-full text-center px-4">
+                <h2 className="text-3xl font-semibold text-danger-600 mb-4">Thank you</h2>
+                <p className="text-sm text-gray-600 mb-4">Thank you for submitting your documents.</p>
+                <p className="text-sm text-gray-500 mb-6">We are currently reviewing them and will notify you via email once your account has been confirmed and approved.</p>
+                <p className="text-sm text-gray-500 mb-6">We appreciate your interest in UNITE and look forward to working with you as part of our ecosystem.</p>
+                <div className="mb-6">
+                  <Button
+                    className="w-full bg-danger-600 hover:bg-danger-700 text-white py-3 rounded-full"
+                    onClick={() => {
+                      // final complete registration action: show success modal
+                      setShowModal(true);
                     }}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    className="px-4 py-2 border border-gray-200 rounded-lg text-sm"
-                    type="button"
-                    onClick={sendVerificationCode}
-                    disabled={!formData.Email.trim() || emailSent}
                   >
-                    {validatingCode ? "Sending..." : emailSent ? "Code Sent" : "Send Verification Code"}
-                  </button>
+                    Complete Registration
+                  </Button>
                 </div>
-                {emailSent && (
-                  <p className="text-sm text-gray-600 mt-2">
-                    Check your email for the verification code to complete your signup.
-                  </p>
-                )}
-                {emailSent && !emailVerified && (
-                  <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                    <p className="text-sm text-blue-800">
-                      A verification code has been sent to your email. Please check your inbox and enter the code below to complete your registration.
-                    </p>
-                    <div className="mt-3">
-                      <label
-                        className="text-sm font-medium block mb-1"
-                        htmlFor="verification-code"
-                      >
-                        Verification Code
-                      </label>
-                      <input
-                        className={`${inputClass} w-full`}
-                        id="verification-code"
-                        value={formData.Verification_Code}
-                        onChange={(e) => update({ Verification_Code: e.target.value })}
-                      />
-                    </div>
-                    <div className="flex gap-2 mt-3">
-                      <button
-                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm"
-                        onClick={verifyCode}
-                        disabled={validatingCode}
-                      >
-                        {validatingCode ? "Verifying..." : "Verify Code"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {emailSent && emailVerified && (
-                  <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                    <div className="flex items-center gap-2 text-green-800">
-                      <Check className="w-5 h-5" />
-                      <p className="text-sm font-medium">Email verified successfully!</p>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -556,33 +601,36 @@ export default function SignUp() {
 
         {error && <div className="text-sm text-red-600">{error}</div>}
 
-        <div className="flex items-center gap-3">
-          {step > 0 ? (
-            <button
-              className="px-4 py-2 border border-gray-200 rounded-lg text-sm"
-              type="button"
-              onClick={() => {
-                setDirection("prev");
-                setStep((s) => Math.max(0, s - 1));
-              }}
-            >
-              Back
-            </button>
-          ) : (
-            <div />
-          )}
-          <div className="flex-1">
-            <Button
-              className="w-full bg-danger-600 hover:bg-danger-700 text-white"
-              color="primary"
-              isLoading={isLoading}
-              size="md"
-              type="submit"
-            >
-              {step < 3 ? "Next" : "Complete Registration"}
-            </Button>
+        {/* Hide bottom navigation when on verification step (step 3) or final step (step 4) */}
+        {step !== 3 && step !== 4 && (
+          <div className="flex items-center gap-3">
+            {step > 0 ? (
+              <button
+                className="px-4 py-2 border border-gray-200 rounded-lg text-sm"
+                type="button"
+                onClick={() => {
+                  setDirection("prev");
+                  setStep((s) => Math.max(0, s - 1));
+                }}
+              >
+                Back
+              </button>
+            ) : (
+              <div />
+            )}
+            <div className="flex-1">
+              <Button
+                className="w-full bg-danger-600 hover:bg-danger-700 text-white"
+                color="primary"
+                isLoading={isLoading}
+                size="md"
+                type="submit"
+              >
+                {step < 4 ? "Next" : "Complete Registration"}
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </form>
 
       <div className="mt-6 text-center text-sm text-gray-600">
@@ -596,7 +644,7 @@ export default function SignUp() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <div className="text-center">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
