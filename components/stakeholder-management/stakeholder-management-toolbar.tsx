@@ -3,6 +3,7 @@
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import { Tabs, Tab } from "@heroui/tabs";
+import { Pagination } from "@heroui/pagination"; // Import Pagination
 import {
   Magnifier as Search,
   ArrowDownToSquare as Download,
@@ -20,6 +21,10 @@ interface StakeholderToolbarProps {
   onTabChange?: (tab: string) => void;
   defaultTab?: string;
   onSearch?: (query: string) => void;
+  // Add pagination props
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
 }
 
 export default function StakeholderToolbar({
@@ -30,17 +35,19 @@ export default function StakeholderToolbar({
   onTabChange,
   defaultTab = "all",
   onSearch,
+  currentPage,
+  totalPages,
+  onPageChange,
 }: StakeholderToolbarProps) {
   const handleTabChange = (key: React.Key) => {
     const k = String(key);
-
     onTabChange?.(k);
   };
 
   return (
     <div className="w-full bg-white">
-      <div className="flex items-center justify-between px-6 py-3">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between px-6 py-3 gap-4">
+        <div className="flex items-center gap-4 flex-1">
           <Tabs
             radius="md"
             selectedKey={defaultTab}
@@ -53,11 +60,27 @@ export default function StakeholderToolbar({
             <Tab key="pending" title="Pending" />
           </Tabs>
 
+          {/* Render Pagination if we have multiple pages */}
+          {totalPages > 1 && (
+            <Pagination
+              isCompact
+              showControls
+              page={currentPage}
+              total={totalPages}
+              size="sm"
+              variant="light"
+              onChange={onPageChange}
+              classNames={{
+                cursor: "bg-black text-white",
+              }}
+            />
+          )}
+
           <Input
             className="max-w-xs"
             classNames={{
               input: "text-sm",
-              inputWrapper: "border-gray-200 hover:border-gray-300",
+              inputWrapper: "border-gray-200 hover:border-gray-300 h-9",
             }}
             placeholder="Search user..."
             radius="md"
@@ -71,9 +94,8 @@ export default function StakeholderToolbar({
 
         {/* Right side - Action buttons */}
         <div className="flex items-center gap-2">
-          {/* Export Button */}
           <Button
-            className="border-gray-200"
+            className="border-gray-200 font-medium"
             radius="md"
             size="sm"
             startContent={<Download className="w-4 h-4" />}
@@ -83,9 +105,8 @@ export default function StakeholderToolbar({
             Export
           </Button>
 
-          {/* Quick Filter Button */}
           <Button
-            className="border-gray-200"
+            className="border-gray-200 font-medium"
             endContent={<ChevronDown className="w-4 h-4" />}
             radius="md"
             size="sm"
@@ -96,9 +117,8 @@ export default function StakeholderToolbar({
             Quick Filter
           </Button>
 
-          {/* Advanced Filter Button */}
           <Button
-            className="border-gray-200"
+            className="border-gray-200 font-medium"
             endContent={<ChevronDown className="w-4 h-4" />}
             radius="md"
             size="sm"
@@ -110,7 +130,7 @@ export default function StakeholderToolbar({
           </Button>
 
           <Button
-            className="bg-black text-white"
+            className="bg-black text-white font-medium"
             color="default"
             radius="md"
             size="sm"

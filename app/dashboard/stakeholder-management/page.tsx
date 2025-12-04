@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 import { getUserInfo } from "../../../utils/getUserInfo";
@@ -85,6 +85,65 @@ export default function StakeholderManagement() {
   const [openUserDistrictId, setOpenUserDistrictId] = useState<string | null>(
     null,
   );
+  // Add Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10; // Or whatever size you prefer
+
+  // Reset to page 1 when search or tab changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedTab, filters]);
+
+  // 1. Determine the source data based on the selected tab
+  const rawData = useMemo(() => {
+  // 1. PENDING TAB: Return signup requests directly
+  if (selectedTab === "pending") {
+    return signupRequests;
+  }
+
+  // 2. APPROVED TAB: Filter stakeholders for "Approved" or "Completed" status
+  if (selectedTab === "approved") {
+    return stakeholders.filter((s: any) => {
+      const status = String(s.status || "").toLowerCase();
+      return status.includes("approve") || status.includes("complete");
+    });
+  }
+
+  // 3. ALL TAB: Return all stakeholders (usually just the active ones)
+  // If you want "All" to combine Pending + Approved, you would concat them here,
+  // but typically "All" in this context means "All Active Stakeholders".
+  return stakeholders; 
+}, [selectedTab, signupRequests, stakeholders]);
+
+  // 2. Apply Search Filtering (Lifted from Table)
+  const filteredData = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    if (!q) return rawData;
+
+    return rawData.filter((coordinator: any) => {
+      return (
+        (coordinator.name || "").toLowerCase().includes(q) ||
+        (coordinator.email || "").toLowerCase().includes(q) ||
+        (coordinator.organization || coordinator.entity || "").toLowerCase().includes(q) ||
+        (coordinator.province || "").toLowerCase().includes(q) ||
+        (coordinator.district || "").toLowerCase().includes(q) ||
+        (
+          (municipalityCache && municipalityCache[String(coordinator.municipality)]) ||
+          coordinator.municipality ||
+          ""
+        ).toLowerCase().includes(q)
+      );
+    });
+  }, [rawData, searchQuery, municipalityCache]);
+
+  // 3. Calculate Pagination
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    return filteredData.slice(start, end);
+  }, [filteredData, currentPage, itemsPerPage]);
   const router = useRouter();
 
   const ordinalSuffix = (n: number | string) => {
@@ -1829,18 +1888,18 @@ export default function StakeholderManagement() {
       if (!res.ok) throw new Error(json?.message || "Failed to fetch requests");
       const items = json.data || [];
       // Populate with resolved names
-      const mapped = items.map((req: any) => ({
-        id: req._id,
-        name: `${req.firstName} ${req.middleName || ''} ${req.lastName}`.trim(),
-        email: req.email,
-        phone: req.phoneNumber,
-        organization: req.organization || '',
-        province: req.province?.name || req.province?.Province_Name || provincesMap[req.province] || req.province,
-        district: req.district?.name || req.district?.District_Name || districtsMap?.[req.district]?.name || req.district,
-        municipality: req.municipality?.name || req.municipality?.Name || req.municipality?.City_Municipality || municipalityCache[req.municipality] || req.municipality,
-        status: req.status,
-        submittedAt: new Date(req.submittedAt).toLocaleDateString(),
-      }));
+  const mapped = items.map((req: any) => ({
+    id: req._id,
+    name: `${req.firstName} ${req.middleName || ''} ${req.lastName}`.trim(),
+    email: req.email,
+    phone: req.phoneNumber,
+    organization: req.organization || '',
+    province: req.province?.name || req.province?.Province_Name || provincesMap[req.province] || req.province,
+    district: req.district?.name || req.district?.District_Name || districtsMap?.[req.district]?.name || req.district,
+    municipality: req.municipality?.name || req.municipality?.Name || req.municipality?.City_Municipality || municipalityCache[req.municipality] || req.municipality,
+    status: req.status || "Pending",
+    submittedAt: req.submittedAt ? new Date(req.submittedAt).toLocaleDateString() : "",
+  }));
 
       setSignupRequests(mapped);
     } catch (err: any) {
@@ -1943,31 +2002,17 @@ export default function StakeholderManagement() {
         onQuickFilter={handleQuickFilter}
         onSearch={handleSearch}
         onTabChange={(t) => setSelectedTab(t)}
+        // Pass pagination props
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
       />
 
       {/* Table Content */}
       <div className="px-6 py-4 bg-gray-50">
         <StakeholderTable
-          coordinators={
-            selectedTab === "pending"
-              ? signupRequests
-              : selectedTab === "all"
-              ? stakeholders
-              : stakeholders.filter((s: any) => {
-                  const statusRaw =
-                    s.Status || s.status || s.Approval || s.approval || "";
-                  const st = String(statusRaw || "").toLowerCase();
-
-                  if (selectedTab === "approved")
-                    return (
-                      st.includes("approve") ||
-                      st.includes("completed") ||
-                      st.includes("approved")
-                    );
-
-                  return true;
-                })
-          }
+          // Pass the SLICED data here
+          coordinators={paginatedData} 
           municipalityCache={municipalityCache}
           selectedCoordinators={selectedStakeholders}
           onActionClick={handleActionClick}
@@ -1975,9 +2020,11 @@ export default function StakeholderManagement() {
           onSelectAll={handleSelectAll}
           onSelectCoordinator={handleSelectStakeholder}
           onUpdateCoordinator={handleUpdateStakeholder}
-          searchQuery={searchQuery}
+          // We still pass searchQuery to the table so it can highlight if implemented, 
+          // or we can remove it if the table's internal filtering is no longer needed.
+          // Since we filter outside, the table's internal filter will just match everything in the slice.
+          searchQuery={searchQuery} 
           loading={loading}
-          // Pass true only when user is both a system admin and has StaffType='Admin'
           isAdmin={canManageStakeholders}
           isRequests={selectedTab === "pending"}
           onAcceptRequest={handleAcceptRequest}
