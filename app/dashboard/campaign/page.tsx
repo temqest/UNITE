@@ -139,7 +139,7 @@ export default function CampaignPage() {
   };
 
   // Extracted fetchRequests so we can reuse after creating events
-  const fetchRequests = async () => {
+  const fetchRequests = async (fetchAll = false) => {
     setIsLoadingRequests(true);
     setRequestsError("");
 
@@ -154,9 +154,20 @@ export default function CampaignPage() {
       // Build query params for server-side filtering
       const params = new URLSearchParams();
 
-      // Use normal paging parameters — server now returns prioritized pages.
-      params.set("page", String(currentPage));
-      params.set("limit", String(pageSize));
+      // Always fetch all requests for client-side filtering and pagination
+      params.set("page", "1");
+      params.set("limit", "10000"); // High limit to get all
+      if (searchQuery && searchQuery.trim())
+        params.set("search", searchQuery.trim());
+      // NOTE: Do not send `status` to the server here. Backend status tokens
+      // vary and returning server-filtered lists causes mismatches and empty
+      // results. We fetch the page(s) and apply a deterministic client-side
+      // filter based on `event.Status` to ensure tabs show the expected items.
+      // Do not send date_from/date_to to server; advanced date filtering is
+      // performed client-side against the event's Start_Date to avoid server
+      // timezone/format mismatches.
+      if (quickFilter?.category && quickFilter.category !== "all")
+        params.set("category", quickFilter.category);
       if (searchQuery && searchQuery.trim())
         params.set("search", searchQuery.trim());
       // NOTE: Do not send `status` to the server here. Backend status tokens
@@ -182,37 +193,10 @@ export default function CampaignPage() {
       const list = Array.isArray(data) ? data : [];
 
       setRequests(list);
-      // Determine total count from server pagination metadata if present
-      let total = Array.isArray(data) ? data.length : 0;
-
-      if (body.pagination) {
-        total =
-          body.pagination.total ||
-          body.pagination.totalDocs ||
-          body.pagination.totalCount ||
-          total;
-      } else if (body.total !== undefined && body.total !== null) {
-        total = body.total;
-      } else if (body.count !== undefined && body.count !== null) {
-        total = body.count;
-      } else if (body.meta && body.meta.total !== undefined) {
-        total = body.meta.total;
-      }
-      setTotalRequestsCount(Number(total || 0));
-      // mark whether the server returned paged results (i.e. returned only one page)
-      const serverPaged = !!(
-        body.pagination || Number(total || 0) > list.length
-      );
-
-      setIsServerPaged(serverPaged);
-      // If current page is out of range because server returned fewer pages, clamp and re-fetch
-      const pages = Math.max(1, Math.ceil(Number(total || 0) / pageSize));
-
-      if (currentPage > pages) {
-        setCurrentPage(1);
-
-        return;
-      }
+      // Since we fetch all, total is the list length
+      setTotalRequestsCount(list.length);
+      // Always client-side pagination
+      setIsServerPaged(false);
       // if server returned pagination, update UI page data (optional)
       // You can store pagination in state if needed (not implemented here)
     } catch (err: any) {
