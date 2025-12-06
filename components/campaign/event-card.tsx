@@ -1233,35 +1233,67 @@ const EventCard: React.FC<EventCardProps> = ({
     };
 
     if (categoryCandidate.includes("blood")) {
-      let n = pickNumberFrom(bloodTargets);
-      // Fallback: try to parse number from reviewSummary text
+      let n = null;
+      const txt =
+        String(ev?.reviewSummary || ev?.reviewMessage || r?.reviewSummary || r?.reviewMessage || "");
+      const m = txt.match(/target\s+donation\s+of\s+(\d+)/i) || txt.match(/target\s+donation[^\d]*(\d+)/i) || txt.match(/target\s+(?:donation|donations)[^\d]*(\d+)/i);
+      if (m && m[1]) n = extractNumber(m[1]);
       if (n === null) {
-        const txt =
-          String(ev?.reviewSummary || ev?.reviewMessage || r?.reviewSummary || r?.reviewMessage || "");
-        const m = txt.match(/target\s+donation\s+of\s+(\d+)/i) || txt.match(/target\s+donation[^\d]*(\d+)/i) || txt.match(/target\s+(?:donation|donations)[^\d]*(\d+)/i);
-        if (m && m[1]) n = extractNumber(m[1]);
+        n = pickNumberFrom(bloodTargets);
       }
-      return { count: n, label: "u.", isBlood: true };
+      if (n === null) {
+        const m2 = txt.match(/(\d+)/g);
+        if (m2) {
+          const numbers = m2.map(extractNumber).filter((nn): nn is number => nn !== null);
+          if (numbers.length > 0) {
+            const last = numbers[numbers.length - 1];
+            if (last > 0) n = last;
+          }
+        }
+      }
+      return { count: n, label: "u.", isBlood: true, mainLabel: "Goal Count" };
     }
 
     if (categoryCandidate.includes("training")) {
-      let n = pickNumberFrom(trainingTargets);
+      let n = null;
+      const txt = String(ev?.reviewSummary || r?.reviewSummary || "");
+      const m = txt.match(/max(?:imum)?\s+participants?[^\d]*(\d+)/i) || txt.match(/participants?[^\d]*(\d+)/i);
+      if (m && m[1]) n = extractNumber(m[1]);
       if (n === null) {
-        const txt = String(ev?.reviewSummary || r?.reviewSummary || "");
-        const m = txt.match(/max(?:imum)?\s+participants?\s+of\s+(\d+)/i) || txt.match(/participants?[^\d]*(\d+)/i);
-        if (m && m[1]) n = extractNumber(m[1]);
+        n = pickNumberFrom(trainingTargets);
       }
-      return { count: n, label: "Participants", isBlood: false };
+      if (n === null) {
+        const m2 = txt.match(/(\d+)/g);
+        if (m2) {
+          const numbers = m2.map(extractNumber).filter((nn): nn is number => nn !== null);
+          if (numbers.length > 0) {
+            const last = numbers[numbers.length - 1];
+            if (last > 0) n = last;
+          }
+        }
+      }
+      return { count: n, label: "", isBlood: false, mainLabel: "Audience No." };
     }
 
     if (categoryCandidate.includes("advoc") || categoryCandidate.includes("advocacy")) {
-      let n = pickNumberFrom(advocacyTargets);
+      let n = null;
+      const txt = String(ev?.reviewSummary || r?.reviewSummary || "");
+      const m = txt.match(/expected\s+audience\s+size[^\d]*(\d+)/i) || txt.match(/audience[^\d]*(\d+)/i) || txt.match(/participants?[^\d]*(\d+)/i);
+      if (m && m[1]) n = extractNumber(m[1]);
       if (n === null) {
-        const txt = String(ev?.reviewSummary || r?.reviewSummary || "");
-        const m = txt.match(/expected\s+audience\s+size\s+of\s+(\d+)/i) || txt.match(/audience[^\d]*(\d+)/i) || txt.match(/participants?[^\d]*(\d+)/i);
-        if (m && m[1]) n = extractNumber(m[1]);
+        n = pickNumberFrom(advocacyTargets);
       }
-      return { count: n, label: "Participants", isBlood: false };
+      if (n === null) {
+        const m2 = txt.match(/(\d+)/g);
+        if (m2) {
+          const numbers = m2.map(extractNumber).filter((nn): nn is number => nn !== null);
+          if (numbers.length > 0) {
+            const last = numbers[numbers.length - 1];
+            if (last > 0) n = last;
+          }
+        }
+      }
+      return { count: n, label: "", isBlood: false, mainLabel: "Audience No." };
     }
 
     // Fallback: try any known fields
@@ -1271,7 +1303,20 @@ const EventCard: React.FC<EventCardProps> = ({
       ...advocacyTargets,
     ]);
 
-    return { count: fallback, label: fallback !== null ? "" : "", isBlood: false };
+    let n = fallback;
+    if (n === null) {
+      const txt = String(ev?.reviewSummary || ev?.reviewMessage || r?.reviewSummary || r?.reviewMessage || "");
+      const m = txt.match(/(\d+)/g);
+      if (m) {
+        const numbers = m.map(extractNumber).filter((nn): nn is number => nn !== null);
+        if (numbers.length > 0) {
+          const last = numbers[numbers.length - 1];
+          if (last > 0) n = last;
+        }
+      }
+    }
+
+    return { count: n, label: n !== null ? "" : "", isBlood: false, mainLabel: "Goal Count" };
   }, [resolvedRequest, request, fullRequest, category]);
 
   // Format the date/time for the card footer area (e.g. "Dec 1 8:00 AM - 4:00 PM")
@@ -1496,7 +1541,7 @@ const EventCard: React.FC<EventCardProps> = ({
         <CardFooter className="pt-4 flex-col items-stretch gap-3">
           <div className="h-px w-full bg-default-200"></div>
           <div className="flex justify-between w-full items-center">
-            <span className="text-xs">Goal Count</span>
+            <span className="text-xs">{goalInfo?.mainLabel || "Goal Count"}</span>
             <span
               className={`text-2xl font-bold ${
                 goalInfo?.isBlood ? "text-danger" : "text-default-800"

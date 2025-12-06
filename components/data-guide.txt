@@ -196,6 +196,39 @@ notification:
   }
 }
 
+events: 
+
+/**
+ * Paste one or more documents here
+ */
+{
+  "Event_ID": "EVENT_1764771226866_a5nmb644d",
+  "Event_Title": "blood drive #1",
+  "Location": "Naga City",
+  "Start_Date": {
+    "$date": "2025-12-18T00:00:00.000Z"
+  },
+  "End_Date": {
+    "$date": "2025-12-18T08:00:00.000Z"
+  },
+  "coordinator_id": "COORD_1764164854112_19get7y4l",
+  "stakeholder_id": "STKH_1764041465353_sytg712f1",
+  "made_by_id": "COORD_1764164854112_19get7y4l",
+  "made_by_role": "Coordinator",
+  "Email": "ok@gmail.com",
+  "Phone_Number": "09123456789",
+  "Event_Description": "ok",
+  "Category": "BloodDrive",
+  "Status": "Rejected",
+  "createdAt": {
+    "$date": "2025-12-03T14:13:46.938Z"
+  },
+  "updatedAt": {
+    "$date": "2025-12-05T02:59:17.591Z"
+  },
+  "__v": 0
+}
+
 training:
 
 {
