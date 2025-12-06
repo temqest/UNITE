@@ -392,7 +392,7 @@ export default function AddStakeholderModal({
           null
         if (!uid && !isSysAdmin) {
           const infoId = info?.raw?.id || info?.raw?.ID || parsed?.id || parsed?.ID || null
-          if (infoId) {
+          if (infoId && !String(infoId).toLowerCase().startsWith("admin_")) {
             ;(async () => {
               try {
                 const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "")
@@ -800,7 +800,7 @@ export default function AddStakeholderModal({
                       }
                       name="cityMunicipality"
                       radius="md"
-                      selectedKeys={cityInput ? new Set([String(cityInput)]) : new Set()}
+                      selectedKeys={selectedMunicipalityId ? new Set([selectedMunicipalityId]) : new Set()}
                       size="md"
                       variant="bordered"
                       onSelectionChange={(keys: any) => {

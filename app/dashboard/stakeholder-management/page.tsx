@@ -101,12 +101,9 @@ export default function StakeholderManagement() {
     return signupRequests;
   }
 
-  // 2. APPROVED TAB: Filter stakeholders for "Approved" or "Completed" status
+  // 2. APPROVED TAB: Return all stakeholders (approved means not pending)
   if (selectedTab === "approved") {
-    return stakeholders.filter((s: any) => {
-      const status = String(s.status || "").toLowerCase();
-      return status.includes("approve") || status.includes("complete");
-    });
+    return stakeholders;
   }
 
   // 3. ALL TAB: Return all stakeholders (usually just the active ones)
@@ -1240,7 +1237,14 @@ export default function StakeholderManagement() {
 
         if (munId && !municipalityCache[String(munId)]) {
           needsMunicipalityResolve.push({
-            districtId: raw.district || raw.District_ID || raw.DistrictId || "",
+            districtId: String(
+              raw.district?._id ||
+              raw.district?.id ||
+              raw.district ||
+              raw.District_ID ||
+              raw.DistrictId ||
+              ""
+            ),
             municipalityId: String(munId),
           });
         }
@@ -1560,13 +1564,17 @@ export default function StakeholderManagement() {
             if (municipalityCache[String(mid)]) continue; // already known
 
             const did =
-              raw.district ||
-              raw.District ||
-              raw.district_id ||
-              raw.District_ID ||
-              raw.districtId ||
-              raw.DistrictId ||
-              null;
+              String(
+                raw.district?._id ||
+                raw.district?.id ||
+                raw.district ||
+                raw.District ||
+                raw.district_id ||
+                raw.District_ID ||
+                raw.districtId ||
+                raw.DistrictId ||
+                ""
+              );
 
             if (!did) continue; // cannot resolve without district
 
