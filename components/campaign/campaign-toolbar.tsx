@@ -5,7 +5,6 @@ import { Input } from "@heroui/input";
 import { DatePicker, DateRangePicker } from "@heroui/date-picker";
 import { Tabs, Tab } from "@heroui/tabs";
 import { Button, ButtonGroup } from "@heroui/button";
-import { Pagination } from "@heroui/pagination";
 import {
   Dropdown,
   DropdownTrigger,
@@ -527,15 +526,105 @@ export default function CampaignToolbar({
 
             {/* Pagination and its buttons */}
             {totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <Pagination
-                  showControls
-                  page={currentPage}
+              <div className="flex items-center gap-1">
+                {/* Previous Button */}
+                <Button
+                  isIconOnly
                   size="sm"
-                  total={totalPages}
                   variant="light"
-                  onChange={onPageChange}
-                />
+                  isDisabled={currentPage === 1}
+                  onPress={() => onPageChange(currentPage - 1)}
+                  className="min-w-8 h-8"
+                >
+                  ‹
+                </Button>
+
+                {/* Page Numbers with ellipsis logic */}
+                {(() => {
+                  const pages = [];
+                  const maxVisible = 4; // Maximum number of page buttons to show
+
+                  if (totalPages <= maxVisible + 1) {
+                    // If total pages is small, show all pages
+                    for (let i = 1; i <= totalPages; i++) {
+                      pages.push(i);
+                    }
+                  } else {
+                    // Always start with page 1
+                    pages.push(1);
+
+                    // Calculate how many pages we can show in the middle
+                    const remainingSlots = maxVisible - 2; // -2 for first and last page
+                    const sidePages = Math.floor(remainingSlots / 2);
+
+                    // Calculate range around current page
+                    let startRange = Math.max(2, currentPage - sidePages);
+                    let endRange = Math.min(totalPages - 1, currentPage + sidePages);
+
+                    // Adjust to ensure we show the right number of pages
+                    const actualRange = endRange - startRange + 1;
+                    if (actualRange < remainingSlots) {
+                      if (startRange === 2) {
+                        endRange = Math.min(totalPages - 1, endRange + (remainingSlots - actualRange));
+                      } else if (endRange === totalPages - 1) {
+                        startRange = Math.max(2, startRange - (remainingSlots - actualRange));
+                      }
+                    }
+
+                    // Add ellipsis after 1 if there's a gap
+                    if (startRange > 2) {
+                      pages.push('...');
+                    }
+
+                    // Add the range
+                    for (let i = startRange; i <= endRange; i++) {
+                      pages.push(i);
+                    }
+
+                    // Add ellipsis before last page if there's a gap
+                    if (endRange < totalPages - 1) {
+                      pages.push('...');
+                    }
+
+                    // Always end with last page
+                    pages.push(totalPages);
+                  }
+
+                  // Render the pages
+                  return pages.map((page, index) => {
+                    if (page === '...') {
+                      return (
+                        <span key={`ellipsis-${index}`} className="px-2 text-gray-400">
+                          ...
+                        </span>
+                      );
+                    }
+                    return (
+                      <Button
+                        key={page}
+                        size="sm"
+                        variant={currentPage === page ? "solid" : "light"}
+                        color={currentPage === page ? "primary" : "default"}
+                        onPress={() => onPageChange(page as number)}
+                        className="min-w-8 h-8 px-2"
+                      >
+                        {page}
+                      </Button>
+                    );
+                  });
+                })()}
+
+                {/* Next Button */}
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="light"
+                  isDisabled={currentPage === totalPages}
+                  onPress={() => onPageChange(currentPage + 1)}
+                  className="min-w-8 h-8"
+                >
+                  ›
+                </Button>
               </div>
             )}
           </div>
