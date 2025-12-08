@@ -67,14 +67,17 @@ export const useAllowedActionSet = (payload: {
 
   return useMemo(() => {
     const set = new Set<string>();
-    const pushActions = (src?: any) => {
-      if (!src) return;
-      const candidates = [
-        src.allowedActions,
-        src.allowed_actions,
-        src.allowed_actions_list,
-      ];
 
+    // Safe recursive walker to discover allowedActions and boolean flags
+    const visit = (node: any, depth = 0, maxDepth = 4) => {
+      if (!node || depth > maxDepth) return;
+
+      // If this node directly carries allowed actions arrays, ingest them
+      const candidates = [
+        node.allowedActions,
+        node.allowed_actions,
+        node.allowed_actions_list,
+      ];
       candidates.forEach((candidate) => {
         if (Array.isArray(candidate)) {
           candidate.forEach((action) => {
@@ -84,22 +87,45 @@ export const useAllowedActionSet = (payload: {
         }
       });
 
+      // Boolean flags mapped to actions
       Object.entries(BOOLEAN_FLAG_TO_ACTION).forEach(
         ([flag, actionName]: [string, string]) => {
-          if (src[flag]) {
-            set.add(actionName);
-          }
+          try {
+            if (node && node[flag]) set.add(actionName);
+          } catch (e) {}
         },
       );
 
-      if (src.event && src.event !== src) {
-        pushActions(src.event);
+      // If node is array, traverse elements
+      if (Array.isArray(node)) {
+        node.forEach((el) => visit(el, depth + 1, maxDepth));
+        return;
+      }
+
+      // Traverse common nested places quickly
+      try {
+        if (node.event && node.event !== node) visit(node.event, depth + 1, maxDepth);
+        if (node.reviewer && node.reviewer !== node) visit(node.reviewer, depth + 1, maxDepth);
+        if (node.rescheduleProposal && node.rescheduleProposal.proposedBy) visit(node.rescheduleProposal.proposedBy, depth + 1, maxDepth);
+        if (Array.isArray(node.decisionHistory)) node.decisionHistory.forEach((dh: any) => visit(dh, depth + 1, maxDepth));
+      } catch (e) {}
+
+      // Generic small-object traversal to catch unexpected placements (only shallow)
+      if (typeof node === 'object') {
+        for (const key of Object.keys(node)) {
+          const val = (node as any)[key];
+          if (!val) continue;
+          // avoid traversing very large structures like full text fields
+          if (typeof val === 'object') {
+            visit(val, depth + 1, maxDepth);
+          }
+        }
       }
     };
 
-    pushActions(request);
-    pushActions(fullRequest);
-    pushActions(resolvedRequest);
+    visit(request);
+    visit(fullRequest);
+    visit(resolvedRequest);
 
     return set;
   }, [request, fullRequest, resolvedRequest]);

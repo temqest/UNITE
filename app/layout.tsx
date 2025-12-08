@@ -4,6 +4,7 @@ import clsx from "clsx";
 
 import { Providers } from "./providers";
 import { LoadingOverlay } from "@/components/loading-overlay";
+import ClientPerfFix from "@/components/client-perf-fix";
 
 import { siteConfig } from "@/config/site";
 import { fontSans } from "@/config/fonts";
@@ -34,6 +35,8 @@ export default function RootLayout({
         )}
       >
         <Providers themeProps={{ attribute: "class", defaultTheme: "light" }}>
+          {/* Patch: client-side performance.measure guard to avoid negative timestamp errors in dev tooling */}
+          <ClientPerfFix />
           <LoadingOverlay />
           {children}
         </Providers>

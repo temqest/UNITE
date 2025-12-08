@@ -171,19 +171,47 @@ const EventCard: React.FC<EventCardProps> = ({
     return "admin-action";
   };
 
+  const viewer = getViewer();
+  const viewerId = getViewerId();
+  const viewerRoleString = String(viewer.role || "").toLowerCase();
+
   const allowedActionSet = useAllowedActionSet({
     request,
     fullRequest,
     resolvedRequest,
   });
+  // Debug: log allowed actions for the current viewer
+  try {
+    // Log more detailed payload for troubleshooting coordinator vs admin flows
+    const dbg = {
+      requestId: resolvedRequestId,
+      viewerId,
+      viewerRoleString,
+      actions: Array.from(allowedActionSet || []),
+      status: resolvedRequest?.Status || resolvedRequest?.status,
+      reviewer: resolvedRequest?.reviewer,
+      coordinator_id: resolvedRequest?.coordinator_id,
+      resolvedAllowedActions: resolvedRequest?.allowedActions ?? resolvedRequest?.allowed_actions ?? null,
+      rootAllowedActions: request?.allowedActions ?? request?.allowed_actions ?? null,
+    };
+    console.debug("[EventCard] allowedActionSet", dbg);
+    // For coordinator/admin sessions, also print the whole request snapshot (trimmed)
+    if (viewerRoleString.includes("coordinator") || viewerRoleString.includes("admin")) {
+      try {
+        console.debug("[EventCard] resolvedRequest (trimmed)", {
+          Request_ID: resolvedRequest?.Request_ID || resolvedRequest?._id,
+          Status: resolvedRequest?.Status || resolvedRequest?.status,
+          reviewer: resolvedRequest?.reviewer,
+          allowedActions: resolvedRequest?.allowedActions || resolvedRequest?.allowed_actions || null,
+          event: resolvedRequest?.event ? { Event_ID: resolvedRequest.event.Event_ID || resolvedRequest.event._id, Status: resolvedRequest.event.Status || resolvedRequest.event.status } : null,
+        });
+      } catch (e) {}
+    }
+  } catch (e) {}
   const hasAllowedAction = React.useCallback(
     hasAllowedActionFactory(allowedActionSet),
     [allowedActionSet],
   );
-
-  const viewer = getViewer();
-  const viewerId = getViewerId();
-  const viewerRoleString = String(viewer.role || "").toLowerCase();
 
   const isReviewAccepted = (() => {
     try {
@@ -1439,9 +1467,8 @@ const EventCard: React.FC<EventCardProps> = ({
               setRejectOpen={setRejectOpen}
               setCancelOpen={setCancelOpen}
               setDeleteOpen={setDeleteOpen}
-              showConfirmFallback={
-                isReviewAccepted && viewerIsAssignedCoordinator
-              }
+              // Do NOT show confirm fallback for reviewers; rely solely on allowed actions
+              showConfirmFallback={false}
               onConfirm={async () => {
                 try {
                   if (!resolvedRequestId)
