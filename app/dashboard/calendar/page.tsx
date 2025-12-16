@@ -40,7 +40,7 @@ import EditEventModal from "@/components/calendar/event-edit-modal";
 import EventManageStaffModal from "@/components/calendar/event-manage-staff-modal";
 import EventRescheduleModal from "@/components/calendar/event-reschedule-modal";
 import CalendarToolbar from "@/components/calendar/calendar-toolbar";
-import Topbar from "@/components/topbar";
+import Topbar from "@/components/layout/topbar";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getUserInfo } from "@/utils/getUserInfo";
 import MobileNav from "@/components/tools/mobile-nav";

@@ -3,8 +3,8 @@ import { Metadata } from "next";
 import clsx from "clsx";
 
 import { Providers } from "./providers";
-import { LoadingOverlay } from "@/components/loading-overlay";
-import ClientPerfFix from "@/components/client-perf-fix";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import ClientPerfFix from "@/components/utils/client-perf-fix";
 
 import { siteConfig } from "@/config/site";
 import { fontSans } from "@/config/fonts";

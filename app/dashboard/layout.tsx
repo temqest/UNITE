@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Sidebar from "@/components/sidebar";
-import ProtectedRoute from "@/components/ProtectedRoute";
-import { getUserInfo } from "../../utils/getUserInfo";
+import Sidebar from "@/components/layout/sidebar";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import { getUserInfo } from "@/utils/getUserInfo";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;

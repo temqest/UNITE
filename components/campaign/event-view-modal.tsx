@@ -150,8 +150,6 @@ export const EventViewModal: React.FC<EventViewModalProps> = ({
     coordinatorLabel = safe(request.MadeByStakeholderID);
   }
 
-  // debug output to help trace missing fields (useful during development)
-
   return (
     <Modal
       isOpen={isOpen}
@@ -159,6 +157,11 @@ export const EventViewModal: React.FC<EventViewModalProps> = ({
       scrollBehavior="inside"
       size="2xl"
       onClose={onClose}
+      className="z-[1100000]"
+      classNames={{
+        wrapper: "z-[1100000]",
+        backdrop: "z-[1050000] bg-black/40"
+      }}
     >
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { useLocations } from "../locations-provider";
+import { useLocations } from "../providers/locations-provider";
 import { Persons as Users, Eye, EyeSlash as EyeOff } from "@gravity-ui/icons";
 import { X } from "lucide-react";
 import {

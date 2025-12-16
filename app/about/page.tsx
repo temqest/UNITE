@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation"; // Production Import
-import { Navbar } from "@/components/navbar";
+import { Navbar } from "@/components/layout/navbar";
 
 // Production HeroUI Imports for Page Content
 import { Button } from "@heroui/button";

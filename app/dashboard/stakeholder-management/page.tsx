@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { getUserInfo } from "../../../utils/getUserInfo";
 import { debug, warn } from "../../../utils/devLogger";
 
-import Topbar from "@/components/topbar";
+import Topbar from "@/components/layout/topbar";
 import StakeholderToolbar from "@/components/stakeholder-management/stakeholder-management-toolbar";
 import StakeholderTable from "@/components/stakeholder-management/stakeholder-management-table";
 import AddStakeholderModal from "@/components/stakeholder-management/add-stakeholder-modal";

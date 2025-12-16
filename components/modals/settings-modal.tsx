@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getUserInfo } from "../utils/getUserInfo";
+import { getUserInfo } from "@/utils/getUserInfo";
 import { useRouter } from "next/navigation";
 import { Modal, ModalContent, ModalHeader, ModalBody } from "@heroui/modal";
 import { Button } from "@heroui/button";
@@ -13,7 +13,7 @@ import { CheckboxGroup, Checkbox } from "@heroui/checkbox";
 import { Chip } from "@heroui/chip";
 import { Xmark, TrashBin } from "@gravity-ui/icons";
 import { parseDate } from "@internationalized/date";
-import { fetchJsonWithAuth } from "../utils/fetchWithAuth";
+import { fetchJsonWithAuth } from "@/utils/fetchWithAuth";
 
 interface Settings {
   notificationsEnabled: boolean;

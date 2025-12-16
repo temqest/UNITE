@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { getUserInfo } from "../../../utils/getUserInfo";
 
-import Topbar from "@/components/topbar";
+import Topbar from "@/components/layout/topbar";
 import MobileNav from "@/components/tools/mobile-nav";
 import CoordinatorToolbar from "@/components/coordinator-management/coordinator-management-toolbar";
 import CoordinatorTable from "@/components/coordinator-management/coordinator-management-table";

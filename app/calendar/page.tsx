@@ -1,7 +1,7 @@
 "use client";
 
 import CalendarPage from "@/app/dashboard/calendar/page";
-import { Navbar } from "@/components/navbar";
+import { Navbar } from "@/components/layout/navbar";
 
 export default function PublicCalendar() {
   // Render the landing Navbar and embed the dashboard calendar.

@@ -1,7 +1,7 @@
 import { Link } from "@heroui/link";
 import { Button } from "@heroui/button";
 
-import { Navbar } from "@/components/navbar";
+import { Navbar } from "@/components/layout/navbar";
 
 export default function Home() {
   return (

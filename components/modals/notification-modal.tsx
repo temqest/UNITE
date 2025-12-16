@@ -40,6 +40,7 @@ import { format, isToday, isYesterday } from "date-fns";
 import { getUserInfo } from "@/utils/getUserInfo";
 import { fetchJsonWithAuth } from "@/utils/fetchWithAuth";
 import EventViewModal from "@/components/campaign/event-view-modal";
+import { createPortal } from "react-dom";
 
 interface NotificationModalProps {
   isOpen: boolean;
@@ -68,7 +69,6 @@ export default function NotificationModal({
 }: NotificationModalProps) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [error, setError] = useState<string | null>(null);
 
   const isMobile = useIsMobile();
@@ -82,8 +82,11 @@ export default function NotificationModal({
   const [qDateRange, setQDateRange] = useState<RangeValue<DateValue> | null>(
     null,
   );
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [dateFilterLabel, setDateFilterLabel] = useState("Today");
+
+  // View Modal state
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [viewRequest, setViewRequest] = useState<any>(null);
 
   // Prevent background scrolling when modal is open
   useEffect(() => {
@@ -96,10 +99,6 @@ export default function NotificationModal({
       document.body.style.overflow = "unset";
     };
   }, [isOpen]);
-
-  // View Modal state
-  const [viewModalOpen, setViewModalOpen] = useState(false);
-  const [viewRequest, setViewRequest] = useState<any>(null);
 
   // --- Helpers to resolve recipient ---
   const getRecipientId = useCallback(() => {
@@ -129,7 +128,6 @@ export default function NotificationModal({
     if (info.isAdmin) return "Admin";
     const role = (info.role || "").toLowerCase();
 
-    // Check raw for specific ID fields if role is ambiguous
     const parsed = info.raw || {};
     const hasStakeholderId = !!(
       parsed.Stakeholder_ID ||
@@ -147,7 +145,6 @@ export default function NotificationModal({
     if (hasStakeholderId || role.includes("stakeholder")) return "Stakeholder";
     if (hasCoordinatorId || role.includes("coordinator")) return "Coordinator";
 
-    // Fallback
     return "Coordinator";
   }, []);
 
@@ -477,7 +474,7 @@ export default function NotificationModal({
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Backdrop */}
+            {/* Backdrop - Lower z-index, only blocks content behind notification modal */}
             <motion.div
               animate={{ opacity: 1 }}
               className="fixed inset-0 z-[99999] bg-black/20 backdrop-blur-sm"
@@ -486,7 +483,7 @@ export default function NotificationModal({
               onClick={onClose}
             />
 
-            {/* Modal Panel */}
+            {/* Modal Panel - Higher than backdrop but lower than event modal */}
             <motion.div
               variants={modalVariants}
               initial="initial"
@@ -495,11 +492,7 @@ export default function NotificationModal({
               transition={{ duration: 0.3, ease: "easeOut" }}
               className={`
                 fixed z-[100000] bg-white overflow-hidden flex flex-col font-sans shadow-2xl
-                
-                /* Mobile: Full screen/Bottom sheet style */
                 inset-0 w-full h-full rounded-none
-                
-                /* Desktop: Floating Modal (Preserved original styling) */
                 md:left-[72px] md:top-4 md:bottom-4 md:w-[800px] md:rounded-2xl md:inset-auto md:border md:border-gray-200
               `}
             >
@@ -523,7 +516,7 @@ export default function NotificationModal({
                   </Button>
                 </div>
 
-                {/* Search & Toolbar Row 1: Search + Filters */}
+                {/* Search & Toolbar Row 1 */}
                 <div className="flex flex-col md:flex-row gap-3 mt-4 md:mt-6">
                   <Input
                     className="flex-1 w-full"
@@ -577,24 +570,12 @@ export default function NotificationModal({
                               variant="bordered"
                               onChange={(e) => setQEventType(e.target.value)}
                             >
-                              <SelectItem key="all">
-                                All
-                              </SelectItem>
-                              <SelectItem key="Request">
-                                Request
-                              </SelectItem>
-                              <SelectItem key="Reschedule">
-                                Reschedule
-                              </SelectItem>
-                              <SelectItem key="Approve">
-                                Approve
-                              </SelectItem>
-                              <SelectItem key="Delete">
-                                Delete
-                              </SelectItem>
-                              <SelectItem key="Assign">
-                                Assign
-                              </SelectItem>
+                              <SelectItem key="all">All</SelectItem>
+                              <SelectItem key="Request">Request</SelectItem>
+                              <SelectItem key="Reschedule">Reschedule</SelectItem>
+                              <SelectItem key="Approve">Approve</SelectItem>
+                              <SelectItem key="Delete">Delete</SelectItem>
+                              <SelectItem key="Assign">Assign</SelectItem>
                             </Select>
                           </div>
 
@@ -621,7 +602,7 @@ export default function NotificationModal({
                   </div>
                 </div>
 
-                {/* Toolbar Row 2: Tabs + Secondary Actions */}
+                {/* Toolbar Row 2 */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between mt-4 md:mt-6 mb-2 gap-3 md:gap-0">
                   <div className="w-full md:w-auto overflow-x-auto pb-1 md:pb-0 no-scrollbar">
                     <Tabs
@@ -711,14 +692,12 @@ export default function NotificationModal({
                                   }
                                 }}
                               >
-                                {/* Icon */}
                                 <div
                                   className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${bg} ${text}`}
                                 >
                                   {icon}
                                 </div>
 
-                                {/* Content */}
                                 <div className="flex-1 min-w-0 pt-0.5">
                                   <p className={`text-sm md:text-xs leading-snug ${isRead ? 'text-gray-500' : 'text-gray-900'}`}>
                                     {n.Message || n.message}
@@ -735,7 +714,6 @@ export default function NotificationModal({
                                   </div>
                                 </div>
 
-                                {/* Actions / Status */}
                                 <div className="flex flex-col items-end gap-2 pt-2">
                                   {!isRead && (
                                     <div className="w-2.5 h-2.5 md:w-2 md:h-2 bg-red-500 rounded-full ring-2 ring-white" />
@@ -750,20 +728,23 @@ export default function NotificationModal({
                   </div>
                 )}
               </ScrollShadow>
-
-              {/* View Detail Modal */}
-              <EventViewModal
-                isOpen={viewModalOpen}
-                request={viewRequest}
-                onClose={() => {
-                  setViewModalOpen(false);
-                  setViewRequest(null);
-                }}
-              />
             </motion.div>
           </>
         )}
       </AnimatePresence>
+
+      {/* Portal: EventViewModal with even higher z-index to appear above notification modal */}
+      {createPortal(
+        <EventViewModal
+          isOpen={viewModalOpen}
+          request={viewRequest}
+          onClose={() => {
+            setViewModalOpen(false);
+            setViewRequest(null);
+          }}
+        />,
+        document.body
+      )}
     </>
   );
 }

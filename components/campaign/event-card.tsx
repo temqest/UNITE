@@ -31,7 +31,7 @@ import {
   FileText,
 } from "@gravity-ui/icons";
 
-import ManageStaffModal from "../manage-staff-modal";
+import ManageStaffModal from "../modals/manage-staff-modal";
 import EventActionMenu from "./event-action-menu";
 import RescheduleModal from "./reschedule-modal";
 import ConfirmModal from "./confirm-modal";
@@ -43,7 +43,7 @@ import {
   deleteRequest as svcDeleteRequest,
 } from "./services/requestsService";
 
-import { useLocations } from "../locations-provider";
+import { useLocations } from "../providers/locations-provider";
 
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 

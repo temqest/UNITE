@@ -7,9 +7,9 @@ import { HeroUIProvider } from "@heroui/system";
 import { useRouter } from "next/navigation";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 
-import { LoadingProvider } from "@/components/loading-overlay";
-import LocationsProvider from "@/components/locations-provider";
-import { AuthProvider } from "@/components/AuthProvider";
+import { LoadingProvider } from "@/components/ui/loading-overlay";
+import LocationsProvider from "@/components/providers/locations-provider";
+import { AuthProvider } from "@/components/providers/AuthProvider";
 
 export interface ProvidersProps {
   children: React.ReactNode;

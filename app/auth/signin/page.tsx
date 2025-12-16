@@ -8,7 +8,7 @@ import { Link } from "@heroui/link";
 import { Checkbox } from "@heroui/checkbox";
 import { Eye, EyeSlash } from '@gravity-ui/icons';
 
-import { useLoading } from "@/components/loading-overlay";
+import { useLoading } from "@/components/ui/loading-overlay";
 
 export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false);

@@ -7,7 +7,7 @@ import { Modal } from "@heroui/modal";
 import { getUserInfo } from "../../../utils/getUserInfo";
 import MobileNav from "@/components/tools/mobile-nav";
 
-import Topbar from "@/components/topbar";
+import Topbar from "@/components/layout/topbar";
 import { debug } from "@/utils/devLogger";
 import CampaignToolbar from "@/components/campaign/campaign-toolbar";
 import CampaignCalendar from "@/components/campaign/campaign-calendar";
@@ -16,8 +16,8 @@ import EventViewModal from "@/components/campaign/event-view-modal";
 import EditEventModal from "@/components/campaign/event-edit-modal";
 // Notification UI handled by `MobileNav` for mobile
 
-import { useLoading } from "@/components/loading-overlay";
-import { useLocations } from "../../../components/locations-provider";
+import { useLoading } from "@/components/ui/loading-overlay";
+import { useLocations } from "../../../components/providers/locations-provider";
 
 /**
  * Campaign Page Component

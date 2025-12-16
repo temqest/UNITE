@@ -12,8 +12,8 @@ import {
   ArrowRightFromSquare,
   Xmark 
 } from "@gravity-ui/icons";
-import NotificationModal from "@/components/notification-modal";
-import SettingsModal from "@/components/settings-modal";
+import NotificationModal from "@/components/modals/notification-modal";
+import SettingsModal from "@/components/modals/settings-modal";
 import { getUserInfo } from "@/utils/getUserInfo";
 import { fetchJsonWithAuth } from "@/utils/fetchWithAuth";
 import { useRouter } from "next/navigation";

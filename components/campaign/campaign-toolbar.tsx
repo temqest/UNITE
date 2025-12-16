@@ -24,7 +24,7 @@ import {
 } from "@heroui/modal";
 import { RangeValue } from "@react-types/shared";
 import { DateValue } from "@internationalized/date";
-import { useLocations } from "../locations-provider";
+import { useLocations } from "../providers/locations-provider";
 import { getUserInfo } from "../../utils/getUserInfo";
 import { decodeJwt } from "../../utils/decodeJwt";
 

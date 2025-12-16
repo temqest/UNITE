@@ -2,7 +2,7 @@
 
 import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "./AuthProvider";
+import { useAuth } from "../providers/AuthProvider";
 
 export default function ProtectedRoute({
   children,
