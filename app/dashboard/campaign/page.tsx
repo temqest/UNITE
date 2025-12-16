@@ -5,6 +5,7 @@ import { Ticket, Calendar as CalIcon, PersonPlanetEarth, Persons, Bell, Gear } f
 import { Modal } from "@heroui/modal";
 
 import { getUserInfo } from "../../../utils/getUserInfo";
+import MobileNav from "@/components/tools/mobile-nav";
 
 import Topbar from "@/components/topbar";
 import { debug } from "@/utils/devLogger";
@@ -13,6 +14,7 @@ import CampaignCalendar from "@/components/campaign/campaign-calendar";
 import EventCard from "@/components/campaign/event-card";
 import EventViewModal from "@/components/campaign/event-view-modal";
 import EditEventModal from "@/components/campaign/event-edit-modal";
+// Notification UI handled by `MobileNav` for mobile
 
 import { useLoading } from "@/components/loading-overlay";
 import { useLocations } from "../../../components/locations-provider";
@@ -26,7 +28,6 @@ export default function CampaignPage() {
   // Defer initializing selectedDate to after hydration to avoid any
   // server/client time differences during initial render.
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const { setIsLoading } = useLoading();
 
@@ -359,6 +360,8 @@ export default function CampaignPage() {
       setIsLoading(false);
     }
   }, [initialLoadDone, setIsLoading]);
+
+  
 
   // Sample event data
   const events = [
@@ -1138,24 +1141,7 @@ export default function CampaignPage() {
       {/* Page Header */}
       <div className="px-6 pt-6 pb-4 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Campaign</h1>
-        {/* Mobile hamburger at top-right next to Campaign title */}
-        <button
-          aria-label="Open navigation"
-          className="inline-flex items-center justify-center p-2 rounded-md md:hidden"
-          onClick={() => setMobileNavOpen(true)}
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 20 20"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path d="M3 5H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            <path d="M3 10H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            <path d="M3 15H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
+          <MobileNav currentUserName={currentUserName} currentUserEmail={currentUserEmail} />
       </div>
 
       {/* Topbar Component */}
@@ -1462,57 +1448,10 @@ export default function CampaignPage() {
         }}
       />
 
-      {/* Mobile Navigation Drawer (right-side) */}
-      {mobileNavOpen && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="ml-auto w-3/4 max-w-sm bg-white h-full shadow-lg p-4">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="text-sm font-semibold">{currentUserName || "User"}</div>
-                <div className="text-xs text-default-500">{currentUserEmail || ""}</div>
-              </div>
-              <button
-                aria-label="Close navigation"
-                onClick={() => setMobileNavOpen(false)}
-                className="p-2 text-xl"
-              >
-                ✕
-              </button>
-            </div>
+      {/* Notifications Modal (mobile bell) */}
+      {/* Mobile notification modal moved into `MobileNav` component */}
 
-            <nav className="flex flex-col gap-3">
-              <a className="flex items-center gap-3 text-sm" href="/dashboard/campaign">
-                <Ticket className="w-5 h-5" />
-                Campaign
-              </a>
-              <a className="flex items-center gap-3 text-sm" href="/dashboard/calendar">
-                <CalIcon className="w-5 h-5" />
-                Calendar
-              </a>
-              <a className="flex items-center gap-3 text-sm" href="/dashboard/stakeholder-management">
-                <PersonPlanetEarth className="w-5 h-5" />
-                Stakeholders
-              </a>
-              <a className="flex items-center gap-3 text-sm" href="/dashboard/coordinator-management">
-                <Persons className="w-5 h-5" />
-                Coordinators
-              </a>
-              <a className="flex items-center gap-3 text-sm" href="/dashboard/notification">
-                <Bell className="w-5 h-5" />
-                Notifications
-              </a>
-              <a className="flex items-center gap-3 text-sm" href="/dashboard/settings">
-                <Gear className="w-5 h-5" />
-                Settings
-              </a>
-              <a className="flex items-center gap-3 text-sm text-danger" href="/auth/login">
-                Logout
-              </a>
-            </nav>
-          </div>
-          <div className="flex-1" onClick={() => setMobileNavOpen(false)} />
-        </div>
-      )}
+      
     </div>
   );
 }

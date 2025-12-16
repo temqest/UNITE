@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getUserInfo } from "../../../utils/getUserInfo";
 
 import Topbar from "@/components/topbar";
+import MobileNav from "@/components/tools/mobile-nav";
 import CoordinatorToolbar from "@/components/coordinator-management/coordinator-management-toolbar";
 import CoordinatorTable from "@/components/coordinator-management/coordinator-management-table";
 import AddCoordinatorModal from "@/components/coordinator-management/add-coordinator-modal";
@@ -25,10 +26,12 @@ interface CoordinatorFormData {
   province: string;
   district: string;
   districtId?: string;
+  accountType: string;
 }
 
 export default function CoordinatorManagement() {
   const router = useRouter();
+  const [isMobile, setIsMobile] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCoordinators, setSelectedCoordinators] = useState<string[]>(
     [],
@@ -100,6 +103,16 @@ export default function CoordinatorManagement() {
       setDisplayEmail(info?.email || "bmc@gmail.com");
     } catch (e) {
       /* ignore */
+    }
+  }, []);
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkViewport = () => setIsMobile(typeof window !== 'undefined' && window.innerWidth < 768);
+    if (typeof window !== 'undefined') {
+      checkViewport();
+      window.addEventListener('resize', checkViewport);
+      return () => window.removeEventListener('resize', checkViewport);
     }
   }, []);
 
@@ -177,6 +190,7 @@ export default function CoordinatorManagement() {
         province: data.province,
         District_ID: data.districtId || data.district,
         Province_Name: data.province,
+        accountType: data.accountType,
       };
 
       const body = { staffData, coordinatorData, createdByAdminId: adminId };
@@ -544,6 +558,16 @@ export default function CoordinatorManagement() {
           provinceId: resolveProvinceId(),
           district: resolveDistrictName(),
           districtId: resolveDistrictId(),
+          // accountType/assignment: prefer top-level coordinator field, then staff or legacy keys
+          accountType:
+            c.accountType ||
+            c.account_type ||
+            c.AccountType ||
+            (c.Coordinator && (c.Coordinator.accountType || c.Coordinator.account_type)) ||
+            staff.accountType ||
+            staff.AccountType ||
+            c.account ||
+            "",
         };
       });
 
@@ -601,13 +625,17 @@ export default function CoordinatorManagement() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Page Header */}
-      <div className="px-6 pt-6 pb-4">
-        <h1 className="text-2xl font-semibold text-gray-900">
-          Coordinator Management
-        </h1>
+    <div className="min-h-screen bg-white relative">
+      <div className="absolute top-4 right-4 md:hidden z-[9999]">
+        <MobileNav />
       </div>
+      {/* Page Header */}
+      <div className="px-4 sm:px-6 pt-6 pb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-900">Coordinator <span className="hidden md:inline">Management</span></h1>
+        {/* MobileNav handles hamburger + notifications on mobile */}
+      </div>
+
+      {/* Inline mobile drawer removed — use MobileNav component above */}
 
       {/* Topbar Component */}
       <Topbar
@@ -623,6 +651,7 @@ export default function CoordinatorManagement() {
         onExport={handleExport}
         onQuickFilter={handleQuickFilter}
         onSearch={handleSearch}
+        isMobile={isMobile}
       />
 
       {/* Active Filters Display */}

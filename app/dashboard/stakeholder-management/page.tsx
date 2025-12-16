@@ -14,6 +14,16 @@ import QuickFilterModal from "@/components/stakeholder-management/quick-filter-m
 import AdvancedFilterModal from "@/components/stakeholder-management/advanced-filter-modal";
 import EditStakeholderModal from "@/components/stakeholder-management/stakeholder-edit-modal";
 import DeleteStakeholderModal from "@/components/stakeholder-management/delete-stakeholder-modal";
+import {
+  Ticket,
+  Calendar as CalIcon,
+  PersonPlanetEarth,
+  Persons,
+  Bell,
+  Gear,
+  Comments,
+} from "@gravity-ui/icons";
+import MobileNav from "@/components/tools/mobile-nav";
 // Removed verbose debug logging from this page per request
 
 interface StakeholderFormData {
@@ -88,6 +98,9 @@ export default function StakeholderManagement() {
   // Add Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10; // Or whatever size you prefer
+
+  // Mobile navigation state (handled by MobileNav component)
+  const [isMobile, setIsMobile] = useState(false);
 
   // Reset to page 1 when search or tab changes
   useEffect(() => {
@@ -217,6 +230,18 @@ export default function StakeholderManagement() {
       };
     }));
   };
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkViewport = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    if (typeof window !== "undefined") {
+      checkViewport();
+      window.addEventListener("resize", checkViewport);
+      return () => window.removeEventListener("resize", checkViewport);
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -622,6 +647,8 @@ export default function StakeholderManagement() {
         Phone_Number: data.contactNumber,
         Password: data.password,
         Province_Name: data.province,
+        // Account type (LGU / Others)
+        Account_Type: data.accountType || data.accountType || null,
         // Primary field used by backend validations
         District_ID: resolvedDistrictValue || null,
         // Supplemental: include DB object id when available (some backends expect this)
@@ -639,6 +666,8 @@ export default function StakeholderManagement() {
         phoneNumber: data.contactNumber,
         password: data.password,
         organizationInstitution: data.organization || null,
+        // accountType for normalized payload
+        accountType: data.accountType || null,
         // Send DB object ids for district/province/municipality where possible
         district: resolvedDistrictObj?._id || resolvedDistrictValue || null,
         province: resolvedDistrictObj?.Province_ID || data.provinceId || null,
@@ -1990,12 +2019,15 @@ export default function StakeholderManagement() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white relative">
+      <div className="absolute top-4 right-4 md:hidden z-[9999]">
+        <MobileNav />
+      </div>
+
       {/* Page Header */}
-      <div className="px-6 pt-6 pb-4">
-        <h1 className="text-2xl font-semibold text-gray-900">
-          Stakeholder Management
-        </h1>
+      <div className="px-4 sm:px-6 pt-6 pb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-900">Stakeholder <span className="hidden md:inline">Management</span></h1>
+        {/* MobileNav component renders hamburger and notifications on small screens */}
       </div>
 
       {/* Topbar Component */}
@@ -2019,10 +2051,11 @@ export default function StakeholderManagement() {
         totalPages={totalPages}
         onPageChange={setCurrentPage}
         pendingCount={signupRequests.length}
+        isMobile={isMobile}
       />
 
       {/* Table Content */}
-      <div className="px-6 py-4 bg-gray-50">
+      <div className="px-4 sm:px-6 py-4 bg-gray-50">
         <StakeholderTable
           // Pass the SLICED data here
           coordinators={paginatedData} 
@@ -2076,6 +2109,7 @@ export default function StakeholderManagement() {
         coordinator={editingStakeholder}
         isOpen={isEditModalOpen}
         isSysAdmin={canManageStakeholders}
+        districtsProp={districtsList}
         userDistrictId={userDistrictId}
         onClose={() => {
           setIsEditModalOpen(false);
@@ -2100,8 +2134,15 @@ export default function StakeholderManagement() {
 
       <QuickFilterModal
         isOpen={openQuickFilter}
+        isMobile={isMobile}
+        searchQuery={searchQuery}
+        onSearch={handleSearch}
         onApply={(f) => {
           setFilters(f);
+          // If search query is in filters, update it
+          if (f.searchQuery !== undefined && isMobile) {
+            setSearchQuery(f.searchQuery);
+          }
           // quick filter is instant: refresh immediately; do not auto-close modal
           fetchStakeholders(f);
         }}

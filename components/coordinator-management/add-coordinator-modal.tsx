@@ -20,6 +20,10 @@ interface AddCoordinatorModalProps {
   onClose: () => void
   onSubmit: (data: CoordinatorFormData) => void
   isSubmitting?: boolean
+  isSysAdmin?: boolean
+  userAccountType?: string
+  userDistrictId?: string
+  userProvinceId?: string
 }
 
 interface CoordinatorFormData {
@@ -34,6 +38,7 @@ interface CoordinatorFormData {
   province: string
   district: string
   districtId?: string
+  accountType: string
 }
 
 export default function AddCoordinatorModal({
@@ -41,6 +46,10 @@ export default function AddCoordinatorModal({
   onClose,
   onSubmit,
   isSubmitting = false,
+  isSysAdmin = false,
+  userAccountType,
+  userDistrictId,
+  userProvinceId,
 }: AddCoordinatorModalProps) {
   const { getAllProvinces, getDistrictsForProvince } = useLocations();
   const [selectedProvince, setSelectedProvince] = useState<string>("")
@@ -54,6 +63,7 @@ export default function AddCoordinatorModal({
   const [districtsError, setDistrictsError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showRetypePassword, setShowRetypePassword] = useState(false)
+  const [selectedAccountType, setSelectedAccountType] = useState<string>(userAccountType || "")
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -75,6 +85,7 @@ export default function AddCoordinatorModal({
       province: selectedProvince,
       district: formData.get("district") as string,
       districtId: selectedDistrictId,
+      accountType: selectedAccountType,
     }
 
     if (data.password !== data.retypePassword) {
@@ -84,6 +95,11 @@ export default function AddCoordinatorModal({
 
     if (!data.province || !data.district) {
       alert("Please select a Province and District before submitting.")
+      return
+    }
+
+    if (!data.accountType) {
+      alert("Please select an Account Type before submitting.")
       return
     }
 
@@ -113,7 +129,7 @@ export default function AddCoordinatorModal({
   return (
     <Modal
       classNames={{
-        base: "max-w-[580px]",
+        base: "max-h-[95vh] max-w-[580px]",
         backdrop: "bg-black/50"
       }}
       isOpen={isOpen}
@@ -122,7 +138,7 @@ export default function AddCoordinatorModal({
       hideCloseButton
       onClose={onClose}
     >
-      <ModalContent className="max-h-[90vh]">
+      <ModalContent>
         {(onClose) => (
           <form onSubmit={handleSubmit} className="flex flex-col h-full">
             {/* Custom Header with Close Button */}
@@ -147,7 +163,7 @@ export default function AddCoordinatorModal({
               </button>
             </div>
 
-            <ModalBody className="gap-3.5 px-6 py-4 overflow-y-auto flex-1">
+            <ModalBody className="gap-3.5 px-6 py-4 max-h-[70vh] overflow-y-auto flex-1">
               {/* Coordinator Name - 3 columns */}
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700">
@@ -227,74 +243,110 @@ export default function AddCoordinatorModal({
                 />
               </div>
 
-              {/* Set Password */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700">
-                  Set Password <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  isRequired
-                  classNames={{
-                    inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
-                    input: "text-sm placeholder:text-gray-400"
-                  }}
-                  endContent={
-                    <button 
-                      className="focus:outline-none" 
-                      type="button" 
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4 text-gray-400" />
-                      ) : (
-                        <Eye className="w-4 h-4 text-gray-400" />
-                      )}
-                    </button>
-                  }
-                  name="password"
-                  placeholder="Set password"
-                  radius="lg"
-                  type={showPassword ? "text" : "password"}
-                  variant="bordered"
-                />
+              {/* Set Password and Retype Password - 2 columns */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">
+                    Set Password <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    isRequired
+                    classNames={{
+                      inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
+                      input: "text-sm placeholder:text-gray-400"
+                    }}
+                    endContent={
+                      <button 
+                        className="focus:outline-none" 
+                        type="button" 
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <Eye className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                    }
+                    name="password"
+                    placeholder="Set password"
+                    radius="lg"
+                    type={showPassword ? "text" : "password"}
+                    variant="bordered"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">
+                    Retype Password <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    isRequired
+                    classNames={{
+                      inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
+                      input: "text-sm placeholder:text-gray-400"
+                    }}
+                    endContent={
+                      <button
+                        className="focus:outline-none"
+                        type="button"
+                        onClick={() => setShowRetypePassword(!showRetypePassword)}
+                      >
+                        {showRetypePassword ? (
+                          <EyeOff className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <Eye className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                    }
+                    name="retypePassword"
+                    placeholder="Retype password"
+                    radius="lg"
+                    type={showRetypePassword ? "text" : "password"}
+                    variant="bordered"
+                  />
+                </div>
               </div>
 
-              {/* Retype Password */}
+              {/* Account Type */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700">
-                  Retype Password <span className="text-red-500">*</span>
-                </label>
-                <Input
+                <label className="text-sm font-medium text-gray-700">Assignment <span className="text-red-500">*</span></label>
+                <Select
                   isRequired
                   classNames={{
-                    inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
-                    input: "text-sm placeholder:text-gray-400"
+                    trigger: "border-gray-300 bg-white shadow-sm h-10",
+                    value: "text-sm text-gray-900"
                   }}
-                  endContent={
-                    <button
-                      className="focus:outline-none"
-                      type="button"
-                      onClick={() => setShowRetypePassword(!showRetypePassword)}
-                    >
-                      {showRetypePassword ? (
-                        <EyeOff className="w-4 h-4 text-gray-400" />
-                      ) : (
-                        <Eye className="w-4 h-4 text-gray-400" />
-                      )}
-                    </button>
-                  }
-                  name="retypePassword"
-                  placeholder="Retype password"
+                  name="accountType"
+                  placeholder="Choose Assignment"
                   radius="lg"
-                  type={showRetypePassword ? "text" : "password"}
+                  selectedKeys={selectedAccountType ? [selectedAccountType] : []}
                   variant="bordered"
-                />
+                  isDisabled={!isSysAdmin && !!userAccountType}
+                  onSelectionChange={(keys: any) => {
+                    const type = Array.from(keys)[0] as string
+                    setSelectedAccountType(type)
+                    if (!isSysAdmin) {
+                      // For non-sys admin, clear locations when account type changes
+                      setSelectedProvince("")
+                      setSelectedDistrictId("")
+                      setDistricts([])
+                    }
+                  }}
+                >
+                  <SelectItem key="LGU" textValue="LGU">
+                    LGU
+                  </SelectItem>
+                  <SelectItem key="Others" textValue="Others">
+                    Others
+                  </SelectItem>
+                </Select>
               </div>
 
               {/* Province and District - 2 col */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">Province</label>
+                  <label className="text-sm font-medium text-gray-700">Province <span className="text-red-500">*</span></label>
                   <Select
                     isRequired
                     classNames={{
@@ -306,6 +358,7 @@ export default function AddCoordinatorModal({
                     radius="lg"
                     selectedKeys={selectedProvince ? [selectedProvince] : []}
                     variant="bordered"
+                    isDisabled={!selectedAccountType}
                     onSelectionChange={(keys: any) => {
                       const id = Array.from(keys)[0] as string
                       setSelectedProvince(id)
@@ -320,7 +373,7 @@ export default function AddCoordinatorModal({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">District</label>
+                  <label className="text-sm font-medium text-gray-700">District <span className="text-red-500">*</span></label>
                   <Select
                     isRequired
                     classNames={{
@@ -332,7 +385,7 @@ export default function AddCoordinatorModal({
                     radius="lg"
                     selectedKeys={selectedDistrictId ? [selectedDistrictId] : []}
                     variant="bordered"
-                    isDisabled={!selectedProvince}
+                    isDisabled={!selectedProvince || !selectedAccountType}
                     onSelectionChange={(keys: any) => {
                       const id = Array.from(keys)[0] as string
                       setSelectedDistrictId(id)

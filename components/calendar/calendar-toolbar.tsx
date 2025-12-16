@@ -37,6 +37,8 @@ interface CalendarToolbarProps {
   onAdvancedFilter?: (filter?: any) => void;
   onCreateEvent?: (eventType: string, eventData: any) => void;
   showCreate?: boolean;
+  showExport?: boolean;
+  isMobile?: boolean;
 }
 
 export default function CalendarToolbar({
@@ -45,6 +47,8 @@ export default function CalendarToolbar({
   onAdvancedFilter,
   onCreateEvent,
   showCreate = true,
+  showExport = true,
+  isMobile = false,
 }: CalendarToolbarProps) {
   const [selectedEventType, setSelectedEventType] = useState(
     new Set(["blood-drive"]),
@@ -154,29 +158,33 @@ export default function CalendarToolbar({
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <Button
-        className=" border-default-200 bg-white font-medium text-xs"
-        radius="md"
-        size="sm"
-        startContent={<Download className="w-4 h-4" />}
-        variant="bordered"
-        onPress={onExport}
-      >
-        Export
-      </Button>
+    <div className="flex flex-wrap items-center gap-2">
+      {showExport && (
+        <Button
+          className="border-default-200 bg-white font-medium text-xs"
+          radius="md"
+          size="sm"
+          startContent={<Download className="w-3 h-3 sm:w-4 sm:h-4" />}
+          variant="bordered"
+          onPress={onExport}
+        >
+          <span className="hidden sm:inline">Export</span>
+          <span className="sm:hidden">Export</span>
+        </Button>
+      )}
 
       <Dropdown>
         <DropdownTrigger>
           <Button
-            className=" border-default-200 bg-white font-medium text-xs"
-            endContent={<ChevronDown className="w-4 h-4" />}
+            className="border-default-200 bg-white font-medium text-xs"
+            endContent={<ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />}
             radius="md"
             size="sm"
-            startContent={<Filter className="w-4 h-4" />}
+            startContent={<Filter className="w-3 h-3 sm:w-4 sm:h-4" />}
             variant="bordered"
           >
-            Quick Filter
+            <span className="hidden sm:inline">Quick Filter</span>
+            <span className="sm:hidden">Filter</span>
           </Button>
         </DropdownTrigger>
         <DropdownMenu
@@ -207,32 +215,36 @@ export default function CalendarToolbar({
         </DropdownMenu>
       </Dropdown>
 
-      <Button
-        className=" border-default-200 bg-white font-medium text-xs"
-        endContent={<ChevronDown className="w-4 h-4" />}
-        radius="md"
-        size="sm"
-        startContent={<SlidersHorizontal className="w-4 h-4" />}
-        variant="bordered"
-        onPress={() => setIsAdvancedModalOpen(true)}
-      >
-        Advanced Filter
-      </Button>
+      {!isMobile && (
+        <Button
+          className="border-default-200 bg-white font-medium text-xs"
+          endContent={<ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />}
+          radius="md"
+          size="sm"
+          startContent={<SlidersHorizontal className="w-3 h-3 sm:w-4 sm:h-4" />}
+          variant="bordered"
+          onPress={() => setIsAdvancedModalOpen(true)}
+        >
+          <span className="hidden sm:inline">Advanced Filter</span>
+          <span className="sm:hidden">Advanced</span>
+        </Button>
+      )}
 
       {showCreate && (
         <>
           <ButtonGroup radius="md" size="sm" variant="solid">
             <Button
               color="primary"
-              startContent={<Ticket className="w-4 h-4" />}
+              startContent={<Ticket className="w-3 h-3 sm:w-4 sm:h-4" />}
               onPress={handleCreateEventClick}
             >
-              {currentEventLabel}
+              <span className="hidden sm:inline">{currentEventLabel}</span>
+              <span className="sm:hidden">Create</span>
             </Button>
             <Dropdown placement="bottom-end">
               <DropdownTrigger>
                 <Button isIconOnly color="primary">
-                  <ChevronDown className="w-4 h-4" />
+                  <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
                 </Button>
               </DropdownTrigger>
               <DropdownMenu
@@ -308,98 +320,100 @@ export default function CalendarToolbar({
       )}
 
       {/* Advanced Filter Modal (matches Campaign Toolbar) */}
-      <Modal
-        isOpen={isAdvancedModalOpen}
-        placement="center"
-        size="md"
-        onClose={() => setIsAdvancedModalOpen(false)}
-      >
-        <ModalContent>
-          <ModalHeader>
-            <h3 className="text-lg font-semibold">Advanced Filter</h3>
-          </ModalHeader>
-          <ModalBody>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <label className="w-20 text-sm">Date (After)</label>
-                <div className="w-full">
-                  <DatePicker
-                    hideTimeZone
-                    classNames={{
-                      base: "w-full",
-                      inputWrapper:
-                        "border-default-200 hover:border-default-400 h-10",
-                      input: "text-sm",
-                    }}
-                    granularity="day"
-                    value={advStart}
-                    variant="bordered"
-                    onChange={setAdvStart}
-                  />
+        {!isMobile && (
+          <Modal
+            isOpen={isAdvancedModalOpen}
+            placement="center"
+            size="md"
+            onClose={() => setIsAdvancedModalOpen(false)}
+          >
+            <ModalContent>
+              <ModalHeader>
+                <h3 className="text-lg font-semibold">Advanced Filter</h3>
+              </ModalHeader>
+              <ModalBody>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <label className="w-20 text-sm">Date (After)</label>
+                    <div className="w-full">
+                      <DatePicker
+                        hideTimeZone
+                        classNames={{
+                          base: "w-full",
+                          inputWrapper:
+                            "border-default-200 hover:border-default-400 h-10",
+                          input: "text-sm",
+                        }}
+                        granularity="day"
+                        value={advStart}
+                        variant="bordered"
+                        onChange={setAdvStart}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="w-20 text-sm">Title</label>
+                    <Input
+                      placeholder="Event title"
+                      value={advTitle}
+                      onChange={(e) =>
+                        setAdvTitle((e.target as HTMLInputElement).value)
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="w-20 text-sm">Requester</label>
+                    <Input
+                      placeholder="Requester name"
+                      value={advRequester}
+                      onChange={(e) =>
+                        setAdvRequester((e.target as HTMLInputElement).value)
+                      }
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="w-20 text-sm">Title</label>
-                <Input
-                  placeholder="Event title"
-                  value={advTitle}
-                  onChange={(e) =>
-                    setAdvTitle((e.target as HTMLInputElement).value)
-                  }
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="w-20 text-sm">Requester</label>
-                <Input
-                  placeholder="Requester name"
-                  value={advRequester}
-                  onChange={(e) =>
-                    setAdvRequester((e.target as HTMLInputElement).value)
-                  }
-                />
-              </div>
-            </div>
-          </ModalBody>
-          <ModalFooter>
-            <Button
-              variant="bordered"
-              onPress={() => {
-                setIsAdvancedModalOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="ml-2"
-              variant="bordered"
-              onPress={() => {
-                setAdvStart(null);
-                setAdvTitle("");
-                setAdvRequester("");
-                onAdvancedFilter?.();
-              }}
-            >
-              Clear
-            </Button>
-            <Button
-              className="ml-2"
-              color="primary"
-              onPress={() => {
-                onAdvancedFilter?.({
-                  start: advStart
-                    ? new Date(advStart).toISOString()
-                    : undefined,
-                  title: advTitle || undefined,
-                  requester: advRequester || undefined,
-                });
-                setIsAdvancedModalOpen(false);
-              }}
-            >
-              Apply
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+              </ModalBody>
+              <ModalFooter>
+                <Button
+                  variant="bordered"
+                  onPress={() => {
+                    setIsAdvancedModalOpen(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="ml-2"
+                  variant="bordered"
+                  onPress={() => {
+                    setAdvStart(null);
+                    setAdvTitle("");
+                    setAdvRequester("");
+                    onAdvancedFilter?.();
+                  }}
+                >
+                  Clear
+                </Button>
+                <Button
+                  className="ml-2"
+                  color="primary"
+                  onPress={() => {
+                    onAdvancedFilter?.({
+                      start: advStart
+                        ? new Date(advStart).toISOString()
+                        : undefined,
+                      title: advTitle || undefined,
+                      requester: advRequester || undefined,
+                    });
+                    setIsAdvancedModalOpen(false);
+                  }}
+                >
+                  Apply
+                </Button>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
+        )}
     </div>
   );
 }

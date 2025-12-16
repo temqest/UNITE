@@ -7,7 +7,7 @@ export const siteConfig = {
   navItems: [
     {
       label: "About Us",
-      href: "",
+      href: "/about",
     },
     {
       label: "Calendar",
@@ -17,7 +17,7 @@ export const siteConfig = {
   navMenuItems: [
     {
       label: "About Us",
-      href: "",
+      href: "/about",
     },
     {
       label: "Calendar",

@@ -18,6 +18,7 @@ interface AddStakeholderModalProps {
   districtsProp?: any[]
   modalError?: string | null
   onClearError?: () => void
+  userAccountType?: string
 }
 
 export default function AddStakeholderModal({
@@ -30,6 +31,7 @@ export default function AddStakeholderModal({
   districtsProp = undefined,
   modalError = null,
   onClearError = undefined,
+  userAccountType,
 }: AddStakeholderModalProps) {
   const [selectedProvinceId, setSelectedProvinceId] = useState<string>("")
   const [provinces, setProvinces] = useState<any[]>([])
@@ -42,6 +44,7 @@ export default function AddStakeholderModal({
   const [cityInput, setCityInput] = useState<string>("")
   const [selectedMunicipalityId, setSelectedMunicipalityId] = useState<string>("")
   const [municipalities, setMunicipalities] = useState<any[]>([])
+  const [selectedAccountType, setSelectedAccountType] = useState<string>(userAccountType || "")
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -97,10 +100,16 @@ export default function AddStakeholderModal({
       districtId: selectedDistrictId,
       cityMunicipality: formData.get("cityMunicipality") as string,
       municipality: resolvedMunicipalityId,
+      accountType: selectedAccountType,
     }
 
     if (data.password !== data.retypePassword) {
       alert("Passwords do not match!")
+      return
+    }
+
+    if (!selectedAccountType) {
+      alert("Please select an Account Type.")
       return
     }
 
@@ -596,62 +605,104 @@ export default function AddStakeholderModal({
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900">
-                  Set Password <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  isRequired
-                  classNames={{
-                    inputWrapper: "border-gray-300",
-                  }}
-                  endContent={
-                    <button className="focus:outline-none" type="button" onClick={() => setShowPassword(!showPassword)}>
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4 text-gray-400" />
-                      ) : (
-                        <Eye className="w-4 h-4 text-gray-400" />
-                      )}
-                    </button>
-                  }
-                  placeholder="Set password"
-                  name="password"
-                  radius="md"
-                  size="md"
-                  type={showPassword ? "text" : "password"}
-                  variant="bordered"
-                />
+              {/* Set Password and Retype Password - 2 columns */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-900">
+                    Set Password <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    isRequired
+                    classNames={{
+                      inputWrapper: "border-gray-300",
+                    }}
+                    endContent={
+                      <button className="focus:outline-none" type="button" onClick={() => setShowPassword(!showPassword)}>
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <Eye className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                    }
+                    placeholder="Set password"
+                    name="password"
+                    radius="md"
+                    size="md"
+                    type={showPassword ? "text" : "password"}
+                    variant="bordered"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-900">
+                    Retype Password <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    isRequired
+                    classNames={{
+                      inputWrapper: "border-gray-300",
+                    }}
+                    endContent={
+                      <button
+                        className="focus:outline-none"
+                        type="button"
+                        onClick={() => setShowRetypePassword(!showRetypePassword)}
+                      >
+                        {showRetypePassword ? (
+                          <EyeOff className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <Eye className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                    }
+                    placeholder="Retype password"
+                    name="retypePassword"
+                    radius="md"
+                    size="md"
+                    type={showRetypePassword ? "text" : "password"}
+                    variant="bordered"
+                  />
+                </div>
               </div>
 
+              {/* Account Type */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-900">
-                  Retype Password <span className="text-red-500">*</span>
+                  Account Type <span className="text-red-500">*</span>
                 </label>
-                <Input
+                <Select
                   isRequired
                   classNames={{
-                    inputWrapper: "border-gray-300",
+                    trigger: "border-gray-300",
                   }}
-                  endContent={
-                    <button
-                      className="focus:outline-none"
-                      type="button"
-                      onClick={() => setShowRetypePassword(!showRetypePassword)}
-                    >
-                      {showRetypePassword ? (
-                        <EyeOff className="w-4 h-4 text-gray-400" />
-                      ) : (
-                        <Eye className="w-4 h-4 text-gray-400" />
-                      )}
-                    </button>
-                  }
-                  placeholder="Retype password"
-                  name="retypePassword"
+                  placeholder="Choose Account Type"
+                  name="accountType"
                   radius="md"
+                  selectedKeys={selectedAccountType ? new Set([selectedAccountType]) : new Set()}
                   size="md"
-                  type={showRetypePassword ? "text" : "password"}
                   variant="bordered"
-                />
+                  isDisabled={!isSysAdmin && !!userAccountType}
+                  onSelectionChange={(keys: any) => {
+                    const type = Array.from(keys)[0] as string
+                    setSelectedAccountType(type)
+                    if (!isSysAdmin) {
+                      // For coordinators, clear locations when account type changes
+                      setSelectedProvinceId("")
+                      setSelectedDistrictId("")
+                      setDistricts([])
+                      setMunicipalities([])
+                      setCityInput("")
+                    }
+                  }}
+                >
+                  <SelectItem key="LGU" textValue="LGU">
+                    LGU
+                  </SelectItem>
+                  <SelectItem key="Others" textValue="Others">
+                    Others
+                  </SelectItem>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -668,6 +719,7 @@ export default function AddStakeholderModal({
                       selectedKeys={selectedProvinceId ? new Set([String(selectedProvinceId)]) : new Set()}
                       size="md"
                       variant="bordered"
+                      isDisabled={!selectedAccountType}
                       onSelectionChange={(keys: any) => handleProvinceChange(keys)}
                     >
                       {provinces.map((p) => (
@@ -710,6 +762,7 @@ export default function AddStakeholderModal({
                         selectedKeys={selectedDistrictId ? new Set([String(selectedDistrictId)]) : new Set()}
                         size="md"
                         variant="bordered"
+                        isDisabled={!selectedProvinceId || !selectedAccountType}
                         onSelectionChange={(keys: any) => {
                           const id = Array.from(keys)[0] as string
                           setSelectedDistrictId(String(id))
@@ -803,6 +856,7 @@ export default function AddStakeholderModal({
                       selectedKeys={selectedMunicipalityId ? new Set([selectedMunicipalityId]) : new Set()}
                       size="md"
                       variant="bordered"
+                      isDisabled={!selectedDistrictId || !selectedAccountType}
                       onSelectionChange={(keys: any) => {
                         const val = Array.from(keys)[0] as string
                         if (municipalities && municipalities.length > 0) {
