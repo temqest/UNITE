@@ -1861,8 +1861,10 @@ export default function CalendarPage(props: any) {
       {/* Header: match campaign spacing with mobile hamburger */}
       <div className="px-4 sm:px-6 pt-6 pb-4 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{publicTitle ?? "Calendar"}</h1>
-        {/* Mobile nav (bell + hamburger) */}
-        <MobileNav currentUserName={currentUserName} currentUserEmail={currentUserEmail} />
+        {/* Mobile nav (bell + hamburger) - hide for public/embed usage */}
+        {!publicTitle && (
+          <MobileNav currentUserName={currentUserName} currentUserEmail={currentUserEmail} />
+        )}
       </div>
 
       <Topbar

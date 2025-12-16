@@ -45,10 +45,18 @@ export default function ChatList({ onSelect, onMobileNavOpen, showMobileNav = fa
       if (otherParticipant?.details) {
         const unreadCount = conv.unreadCount[currentUser?.id || ''] || 0;
 
+        // Determine last message preview: if content empty but lastMessage exists,
+        // show a file/attachment label so file-only messages are visible in the list.
+        const lastPreview = conv.lastMessage
+          ? (conv.lastMessage.content && String(conv.lastMessage.content).trim() !== ''
+              ? conv.lastMessage.content
+              : 'User has sent a photo/file')
+          : 'No messages yet';
+
         items.push({
           id: conv.conversationId,
           name: otherParticipant.details.name,
-          last: conv.lastMessage?.content || 'No messages yet',
+          last: lastPreview,
           time: conv.lastMessage
             ? new Date(conv.lastMessage.timestamp).toLocaleTimeString([], {
                 hour: '2-digit',

@@ -18,7 +18,8 @@ interface Message {
   receiverId: string;
   conversationId: string;
   content: string;
-  messageType: 'text' | 'image' | 'file';
+    messageType: 'text' | 'image' | 'file';
+    attachments?: Array<{ filename: string; url: string; key?: string; mime?: string; size?: number }>;
   timestamp: string;
   status: 'sent' | 'delivered' | 'read';
   senderDetails?: User;
@@ -57,7 +58,7 @@ interface ChatContextType {
 
   // Actions
   selectConversation: (conversationId: string) => void;
-  sendMessage: (receiverId: string, content: string, messageType?: string) => Promise<void>;
+  sendMessage: (receiverId: string, content: string, messageType?: string, attachments?: Array<{ filename: string; url: string; key?: string; mime?: string; size?: number }>) => Promise<void>;
   markAsRead: (messageId: string) => Promise<void>;
   refreshRecipients: () => Promise<void>;
   refreshConversations: () => Promise<void>;
@@ -334,7 +335,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback(async (
     receiverId: string,
     content: string,
-    messageType: string = 'text'
+    messageType: string = 'text',
+    attachments: Array<{ filename: string; url: string; key?: string; mime?: string; size?: number }> = []
   ) => {
     if (!socket || !currentUser) {
       return;
@@ -343,7 +345,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     socket.emit('send_message', {
       receiverId,
       content,
-      messageType
+      messageType,
+      attachments
     });
   }, [socket, currentUser]);
 

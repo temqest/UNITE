@@ -16,6 +16,7 @@ import NotificationModal from "@/components/notification-modal";
 import SettingsModal from "@/components/settings-modal";
 import { getUserInfo } from "@/utils/getUserInfo";
 import { fetchJsonWithAuth } from "@/utils/fetchWithAuth";
+import { useRouter } from "next/navigation";
 
 interface MobileNavProps {
   currentUserName?: string;
@@ -83,6 +84,23 @@ export default function MobileNav({ currentUserName, currentUserEmail }: MobileN
       window.removeEventListener("unite:notifications-read", onRead);
     };
   }, [loadUnreadCount]);
+
+  const router = useRouter();
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem("unite_token");
+      sessionStorage.removeItem("unite_token");
+    } catch (e) {
+      // ignore storage errors
+    }
+
+    // Close panels and navigate to landing
+    setMobileNavOpen(false);
+    setNotifOpen(false);
+    setIsSettingsOpen(false);
+    router.push("/");
+  };
 
   // --- User Info Parsing ---
   const _info = getUserInfo();
@@ -231,13 +249,13 @@ export default function MobileNav({ currentUserName, currentUserEmail }: MobileN
             Settings
           </button>
           
-          <a
-            href="/auth/login"
-            className="flex w-full items-center gap-3 p-3 mt-1 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+          <button
+            onClick={handleLogout}
+            className="flex w-full items-center gap-3 p-3 mt-1 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors text-left"
           >
             <ArrowRightFromSquare className="w-5 h-5" />
             Logout
-          </a>
+          </button>
         </div>
       </div>
 
