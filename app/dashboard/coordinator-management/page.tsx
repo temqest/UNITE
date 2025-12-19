@@ -61,50 +61,70 @@ export default function CoordinatorManagement() {
   const [displayName, setDisplayName] = useState("Bicol Medical Center");
   const [displayEmail, setDisplayEmail] = useState("bmc@gmail.com");
   const [canManageCoordinators, setCanManageCoordinators] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
+  // Permission-based access check using backend API
   useEffect(() => {
-    try {
-      const info = getUserInfo();
+    const checkPageAccess = async () => {
+      try {
+        setCheckingAccess(true);
+        const info = getUserInfo();
+        setUserInfo(info);
+        
+        // Check page access via backend API
+        const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("unite_token") ||
+              sessionStorage.getItem("unite_token")
+            : null;
 
-      setUserInfo(info);
-      const rawUser = info?.raw || null;
-      const staffType =
-        rawUser?.StaffType ||
-        rawUser?.Staff_Type ||
-        rawUser?.staff_type ||
-        rawUser?.staffType ||
-        (rawUser?.user &&
-          (rawUser.user.StaffType ||
-            rawUser.user.staff_type ||
-            rawUser.user.staffType)) ||
-        null;
-      const isStaffAdmin =
-        !!staffType && String(staffType).toLowerCase() === "admin";
-      const resolvedRole = info?.role || null;
-      const roleLower = resolvedRole ? String(resolvedRole).toLowerCase() : "";
-      const isSystemAdmin =
-        !!info?.isAdmin ||
-        (roleLower.includes("sys") && roleLower.includes("admin"));
+        if (!token) {
+          router.replace('/auth/signin');
+          return;
+        }
 
-      setCanManageCoordinators(
-        Boolean(isSystemAdmin || (isStaffAdmin && roleLower === "admin")),
-      );
-      const resolvedCanManage = Boolean(isSystemAdmin || (isStaffAdmin && roleLower === "admin"));
-      setCanManageCoordinators(resolvedCanManage);
-      if (!resolvedCanManage) {
+        const url = base
+          ? `${base}/api/pages/check/coordinator-management`
+          : `/api/pages/check/coordinator-management`;
+
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.canAccess) {
+          setCanManageCoordinators(true);
+          setDisplayName(info?.displayName || info?.raw?.First_Name || "Bicol Medical Center");
+          setDisplayEmail(info?.email || info?.raw?.Email || "bmc@gmail.com");
+        } else {
+          // Access denied - redirect to error page
+          setCanManageCoordinators(false);
+          try {
+            router.replace('/error');
+          } catch (e) {
+            /* ignore navigation errors */
+          }
+        }
+      } catch (e) {
+        console.error('Error checking page access:', e);
+        // On error, deny access for security
+        setCanManageCoordinators(false);
         try {
           router.replace('/error');
-        } catch (e) {
-          /* ignore navigation errors during SSR */
+        } catch (err) {
+          /* ignore navigation errors */
         }
-        return;
+      } finally {
+        setCheckingAccess(false);
       }
-      setDisplayName(info?.displayName || "Bicol Medical Center");
-      setDisplayEmail(info?.email || "bmc@gmail.com");
-    } catch (e) {
-      /* ignore */
-    }
-  }, []);
+    };
+
+    checkPageAccess();
+  }, [router]);
 
   // Detect mobile viewport
   useEffect(() => {
@@ -623,6 +643,23 @@ export default function CoordinatorManagement() {
   const handleClearFilters = () => {
     setFilters({});
   };
+
+  // Show loading state while checking access
+  if (checkingAccess) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-danger mx-auto mb-4"></div>
+          <p className="text-gray-600">Checking access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If access denied, don't render (redirect will happen)
+  if (!canManageCoordinators) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-white relative">

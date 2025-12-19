@@ -1,180 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Input } from "@heroui/input";
 import { Button } from "@heroui/button";
 import { Link } from "@heroui/link";
 import { Checkbox } from "@heroui/checkbox";
 import { Eye, EyeSlash } from '@gravity-ui/icons';
+import { useState } from "react";
 
-import { useLoading } from "@/components/ui/loading-overlay";
+import { useSignIn } from "@/hooks/useSignIn";
 
+/**
+ * Sign-In Page UI Component
+ * Pure presentation component - no business logic
+ * All logic is handled by useSignIn hook
+ */
 export default function SignIn() {
+  const {
+    email,
+    password,
+    rememberMe,
+    error,
+    loading,
+    setEmail,
+    setPassword,
+    setRememberMe,
+    handleSubmit,
+  } = useSignIn();
+
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
-  const { setIsLoading: setGlobalLoading } = useLoading();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError("");
-
-    const payload = { email, password };
-
-    try {
-      // Try staff/admin/coordinator login first
-      // Note: backend mounts auth routes at /api (not /api/auth)
-      let res = await fetch(`${API_URL}/api/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-
-      let body = await res.json().catch(() => ({}));
-
-      // If staff login failed, try stakeholder login
-      if (!res.ok || body.success === false) {
-        res = await fetch(`${API_URL}/api/stakeholders/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        body = await res.json().catch(() => ({}));
-      }
-
-      if (!res.ok || body.success === false) {
-        setError(body.message || "Invalid credentials");
-        setIsLoading(false);
-
-        return;
-      }
-
-      const { token, data } = body;
-
-      // Debug: Log response data to help diagnose production issues
-      if (process.env.NODE_ENV === "development") {
-        console.log("[Login] Response data:", {
-          hasToken: !!token,
-          hasData: !!data,
-          staffType: data?.StaffType || data?.staff_type || data?.role,
-          isAdmin: data?.isAdmin,
-          dataKeys: data ? Object.keys(data) : [],
-        });
-      }
-
-      // Persist auth details: token + user
-      const storage = rememberMe ? localStorage : sessionStorage;
-
-      if (token) storage.setItem("unite_token", token);
-      if (data) storage.setItem("unite_user", JSON.stringify(data));
-
-      // Also write a sanitized legacy `unite_user` object to localStorage
-      // (development compatibility). This ensures the UNITE Sidebar's
-      // client-side getUserInfo() can reliably detect roles during
-      // hydration even when the app used sessionStorage or a different key.
-      try {
-        // Get StaffType from response - backend now includes this field
-        const staffType =
-          data?.StaffType || data?.staff_type || data?.role || null;
-        const staffTypeStr = String(staffType || "").toLowerCase();
-
-        // Determine if user is Admin: StaffType === 'Admin' or explicit isAdmin flag
-        // This is critical for sidebar to show correct icons
-        const isAdminUser =
-          !!data?.isAdmin ||
-          staffType === "Admin" ||
-          staffTypeStr === "admin" ||
-          (staffTypeStr.includes("sys") && staffTypeStr.includes("admin"));
-
-        const legacy = {
-          role: staffType,
-          StaffType: staffType, // CRITICAL: Sidebar needs this exact field name
-          staff_type: staffType, // Also include lowercase variant for compatibility
-          isAdmin: isAdminUser,
-          First_Name:
-            data?.First_Name || data?.first_name || data?.FirstName || null,
-          email: data?.Email || data?.email || null,
-          id:
-            data?.id ||
-            data?.ID ||
-            data?._id ||
-            data?.Stakeholder_ID ||
-            data?.StakeholderId ||
-            data?.stakeholder_id ||
-            data?.Coordinator_ID ||
-            data?.CoordinatorId ||
-            data?.coordinator_id ||
-            data?.user_id ||
-            null,
-          // Include all original data for full compatibility
-          ...data,
-        };
-
-        if (typeof window !== "undefined") {
-          localStorage.setItem("unite_user", JSON.stringify(legacy));
-
-          // Debug: Verify what was stored
-          if (process.env.NODE_ENV === "development") {
-            console.log("[Login] Stored legacy object:", {
-              StaffType: legacy.StaffType,
-              role: legacy.role,
-              isAdmin: legacy.isAdmin,
-              hasStaffType: !!legacy.StaffType,
-            });
-          }
-        }
-      } catch (e) {
-        // Log error in development to help debug production issues
-        console.error("Error storing user info:", e);
-      }
-
-      // Emit an in-window event to notify client-side components of an
-      // auth change (useful for SPA flows where storage events don't fire
-      // in the same window). Then navigate to dashboard. For maximum
-      // reliability we still perform a full navigation so SSR can read
-      // HttpOnly cookies when present.
-      try {
-        if (typeof window !== "undefined") {
-          try {
-            window.dispatchEvent(
-              new CustomEvent("unite:auth-changed", {
-                detail: { role: data?.role, isAdmin: data?.isAdmin },
-              }),
-            );
-          } catch (e) {}
-        }
-      } catch (e) {}
-
-      // Set flag to show loading overlay on dashboard navigation
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("showLoadingOverlay", "true");
-      }
-
-      // Use a full navigation so the browser sends the HttpOnly cookie and
-      // the Next.js server-layout can read it during SSR.
-      if (typeof window !== "undefined") {
-        window.location.assign("/dashboard");
-      } else {
-        router.push("/dashboard");
-      }
-    } catch (err) {
-      console.error("Sign in error:", err);
-      setError("An unexpected error occurred. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const [error, setError] = useState("");
-
   const togglePasswordVisibility = () => setShowPassword(!showPassword);
 
   return (
@@ -208,6 +61,7 @@ export default function SignIn() {
                 value={email}
                 variant="bordered"
                 onChange={(e) => setEmail(e.target.value)}
+                isDisabled={loading}
               />
             </div>
 
@@ -255,6 +109,7 @@ export default function SignIn() {
                 value={password}
                 variant="bordered"
                 onChange={(e) => setPassword(e.target.value)}
+                isDisabled={loading}
               />
             </div>
           </div>
@@ -270,6 +125,7 @@ export default function SignIn() {
                 isSelected={rememberMe}
                 size="sm"
                 onValueChange={setRememberMe}
+                isDisabled={loading}
               >
                 Keep me signed in
               </Checkbox>
@@ -296,8 +152,8 @@ export default function SignIn() {
             <Button
               className="w-full text-white"
               color="danger"
-              endContent={!isLoading}
-              isLoading={isLoading}
+              endContent={!loading}
+              isLoading={loading}
               size="md"
               type="submit"
             >

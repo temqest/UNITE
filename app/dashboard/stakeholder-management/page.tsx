@@ -91,6 +91,7 @@ export default function StakeholderManagement() {
   const [displayName, setDisplayName] = useState("Bicol Medical Center");
   const [displayEmail, setDisplayEmail] = useState("bmc@gmail.com");
   const [canManageStakeholders, setCanManageStakeholders] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const [userDistrictId, setUserDistrictId] = useState<string | null>(null);
   const [openUserDistrictId, setOpenUserDistrictId] = useState<string | null>(
     null,
@@ -244,79 +245,111 @@ export default function StakeholderManagement() {
     }
   }, []);
 
+  // Permission-based access check using backend API
   useEffect(() => {
-    try {
-      const info = getUserInfo();
-
-      setUserInfo(info);
-      const rawUser = info?.raw || null;
-      const staffType =
-        rawUser?.StaffType ||
-        rawUser?.Staff_Type ||
-        rawUser?.staff_type ||
-        rawUser?.staffType ||
-        (rawUser?.user &&
-          (rawUser.user.StaffType ||
-            rawUser.user.staff_type ||
-            rawUser.user.staffType)) ||
-        null;
-      const isStaffAdmin =
-        !!staffType && String(staffType).toLowerCase() === "admin";
-      const resolvedRole = info?.role || null;
-      const roleLower = resolvedRole ? String(resolvedRole).toLowerCase() : "";
-      const isSystemAdmin =
-        !!info?.isAdmin ||
-        (roleLower.includes("sys") && roleLower.includes("admin"));
-
-      // Allow management when the user is a system admin OR has StaffType 'admin'.
-      // Previous logic required both which could incorrectly block sys-admin users.
-      const resolvedCanManage = !!(isSystemAdmin || isStaffAdmin || roleLower === "admin");
-      setCanManageStakeholders(resolvedCanManage);
-      // Determine a default account type for non-sysadmin roles (e.g. Coordinators)
-      let accountType: string | null = null;
+    const checkPageAccess = async () => {
       try {
-        const staffLower = (staffType || "").toString().toLowerCase();
-        if (staffLower === "coordinator" || roleLower.includes("coordinator")) {
-          accountType = "LGU";
+        const info = getUserInfo();
+        setUserInfo(info);
+        
+        // Check page access via backend API
+        const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+        const token =
+          typeof window !== "undefined"
+            ? localStorage.getItem("unite_token") ||
+              sessionStorage.getItem("unite_token")
+            : null;
+
+        if (!token) {
+          router.replace('/auth/signin');
+          return;
+        }
+
+        const url = base
+          ? `${base}/api/pages/check/stakeholder-management`
+          : `/api/pages/check/stakeholder-management`;
+
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.canAccess) {
+          setCanManageStakeholders(true);
+          setDisplayName(info?.displayName || info?.raw?.First_Name || "Bicol Medical Center");
+          setDisplayEmail(info?.email || info?.raw?.Email || "bmc@gmail.com");
+          
+          // Determine a default account type for non-sysadmin roles (e.g. Coordinators)
+          // This is still needed for business logic, but access is now permission-based
+          const rawUser = info?.raw || null;
+          const staffType =
+            rawUser?.StaffType ||
+            rawUser?.Staff_Type ||
+            rawUser?.staff_type ||
+            rawUser?.staffType ||
+            null;
+          const resolvedRole = info?.role || null;
+          const roleLower = resolvedRole ? String(resolvedRole).toLowerCase() : "";
+          let accountType: string | null = null;
+          try {
+            const staffLower = (staffType || "").toString().toLowerCase();
+            if (staffLower === "coordinator" || roleLower.includes("coordinator")) {
+              accountType = "LGU";
+            }
+          } catch (e) {
+            accountType = null;
+          }
+          setUserAccountType(accountType);
+        } else {
+          // Access denied - redirect to error page
+          setCanManageStakeholders(false);
+          try {
+            router.replace('/error');
+          } catch (e) {
+            /* ignore navigation errors */
+          }
         }
       } catch (e) {
-        accountType = null;
-      }
-      setUserAccountType(accountType);
-      // Stakeholders cannot access this page
-      if (roleLower === "stakeholder") {
+        console.error('Error checking page access:', e);
+        // On error, deny access for security
+        setCanManageStakeholders(false);
         try {
           router.replace('/error');
-        } catch (e) {
-          /* ignore navigation errors during SSR */
+        } catch (err) {
+          /* ignore navigation errors */
         }
-        return;
+      } finally {
+        setCheckingAccess(false);
       }
-      setDisplayName(info?.displayName || "Bicol Medical Center");
-      setDisplayEmail(info?.email || "bmc@gmail.com");
-      // determine logged-in user's district id (if any)
-      try {
-        const rawUser = localStorage.getItem("unite_user");
-        const u = rawUser ? JSON.parse(rawUser) : null;
-        const uid =
-          u?.District_ID ||
-          u?.DistrictId ||
-          u?.districtId ||
-          (u?.District && (u.District.District_ID || u.District.DistrictId)) ||
-          (info?.raw &&
-            (info.raw.District_ID ||
-              info.raw.DistrictId ||
-              info.raw.districtId)) ||
-          null;
+    };
 
-        setUserDistrictId(uid || null);
-      } catch (e) {
-        /* ignore */
-      }
+    checkPageAccess();
+  }, [router]);
+
+  // Determine logged-in user's district id (if any)
+  useEffect(() => {
+    try {
+      const rawUser = localStorage.getItem("unite_user");
+      const u = rawUser ? JSON.parse(rawUser) : null;
+      const uid =
+        u?.District_ID ||
+        u?.DistrictId ||
+        u?.districtId ||
+        (u?.District && (u.District.District_ID || u.District.DistrictId)) ||
+        (userInfo?.raw &&
+          (userInfo.raw.District_ID ||
+            userInfo.raw.DistrictId ||
+            userInfo.raw.districtId)) ||
+        null;
+
+      setUserDistrictId(uid || null);
     } catch (e) {
       /* ignore */
     }
-  }, []);
+  }, [userInfo]);
 
   // Load districts once so we can resolve District_ID -> friendly names and province
   useEffect(() => {
@@ -2029,6 +2062,23 @@ export default function StakeholderManagement() {
       setPendingRejectId(null);
     }
   };
+
+  // Show loading state while checking access
+  if (checkingAccess) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-danger mx-auto mb-4"></div>
+          <p className="text-gray-600">Checking access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If access denied, don't render (redirect will happen)
+  if (!canManageStakeholders) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-white relative">
