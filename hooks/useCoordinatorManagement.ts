@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   listStaff,
+  listStaffByCapability,
   getUser,
   createStaff,
   updateStaff,
@@ -53,7 +54,7 @@ export interface UseCoordinatorManagementReturn {
   
   // Data operations
   fetchStaff: () => Promise<void>;
-  createStaffMember: (data: CreateStaffData) => Promise<StaffListItem>;
+  createStaffMember: (data: CreateStaffData, pageContext?: 'coordinator-management' | 'stakeholder-management') => Promise<StaffListItem>;
   updateStaffMember: (id: string, data: UpdateStaffData) => Promise<void>;
   deleteStaffMember: (id: string) => Promise<void>;
   
@@ -106,7 +107,7 @@ export function useCoordinatorManagement(): UseCoordinatorManagementReturn {
   }, [router]);
 
   /**
-   * Fetch staff list
+   * Fetch staff list (filtered by operational capabilities)
    */
   const fetchStaff = useCallback(async () => {
     try {
@@ -118,11 +119,6 @@ export function useCoordinatorManagement(): UseCoordinatorManagementReturn {
         limit: 1000, // Get all for now, can paginate later
       };
 
-      // Add role filter if specified
-      if (filters.role && filters.role.length > 0) {
-        apiFilters.role = filters.role;
-      }
-
       // Add organization type filter if specified
       if (filters.organizationType && filters.organizationType.length > 0) {
         apiFilters.organizationType = filters.organizationType;
@@ -133,7 +129,18 @@ export function useCoordinatorManagement(): UseCoordinatorManagementReturn {
         apiFilters.search = searchQuery;
       }
 
-      const response = await listStaff(apiFilters);
+      // Use capability-based filtering for operational staff
+      // Operational capabilities: request.create, event.create/update, staff.create/update
+      // Note: Using actual permission strings that exist in the database
+      const operationalCapabilities = [
+        'request.create',
+        'event.create',
+        'event.update',
+        'staff.create',
+        'staff.update'
+      ];
+
+      const response = await listStaffByCapability(operationalCapabilities, apiFilters);
 
       if (response.success && response.data) {
         // Transform each user to StaffListItem
@@ -190,6 +197,7 @@ export function useCoordinatorManagement(): UseCoordinatorManagementReturn {
         }
 
         // Apply client-side filtering for coverage areas (if needed)
+        // Note: Backend already filters by operational capabilities, so we don't need to filter again
         let filteredList = staffList;
 
         if (filters.coverageAreaId && filters.coverageAreaId.length > 0) {
@@ -200,6 +208,7 @@ export function useCoordinatorManagement(): UseCoordinatorManagementReturn {
           );
         }
 
+        // No need to filter by capabilities here - backend already did that via listStaffByCapability()
         setStaff(filteredList);
       } else {
         throw new Error(response.message || 'Failed to fetch staff');
@@ -216,10 +225,10 @@ export function useCoordinatorManagement(): UseCoordinatorManagementReturn {
   /**
    * Create staff member
    */
-  const createStaffMember = useCallback(async (data: CreateStaffData): Promise<StaffListItem> => {
+  const createStaffMember = useCallback(async (data: CreateStaffData, pageContext?: 'coordinator-management' | 'stakeholder-management'): Promise<StaffListItem> => {
     try {
       setError(null);
-      const response = await createStaff(data);
+      const response = await createStaff(data, pageContext);
       
       if (response.success && response.data) {
         // Fetch full details including roles and coverage

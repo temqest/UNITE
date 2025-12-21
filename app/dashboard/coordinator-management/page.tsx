@@ -94,7 +94,7 @@ export default function CoordinatorManagement() {
   const handleCreateStaff = async (data: CreateStaffData) => {
     setIsCreating(true);
     try {
-      await createStaffMember(data);
+      await createStaffMember(data, 'coordinator-management');
       setIsAddModalOpen(false);
     } catch (err: any) {
       throw err; // Error will be handled by the modal
@@ -148,7 +148,7 @@ export default function CoordinatorManagement() {
       {/* Page Header */}
       <div className="px-4 sm:px-6 pt-6 pb-4 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">
-          Coordinator <span className="hidden md:inline">Management</span>
+          Staff <span className="hidden md:inline">(Operations)</span>
         </h1>
       </div>
 

@@ -14,6 +14,7 @@ import {
   DropdownSection,
   DropdownItem,
 } from "@heroui/dropdown";
+import { getCapabilityBadges } from "@/utils/permissionUtils";
 import type { StaffListItem } from "@/types/coordinator.types";
 
 interface CoordinatorTableProps {
@@ -175,7 +176,21 @@ export default function CoordinatorTable({
                   />
                 </td>
                 <td className="px-6 py-4 text-sm font-normal text-gray-900">
-                  {coordinator.fullName}
+                  <div className="flex flex-col gap-1">
+                    <span>{coordinator.fullName}</span>
+                    <div className="flex flex-wrap gap-1">
+                      {getCapabilityBadges(coordinator).map((badge, idx) => (
+                        <Chip
+                          key={idx}
+                          size="sm"
+                          variant="flat"
+                          color={badge === 'Hybrid' ? 'secondary' : badge === 'Reviewer' ? 'warning' : 'primary'}
+                        >
+                          {badge}
+                        </Chip>
+                      ))}
+                    </div>
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-600">
                   {coordinator.email}
@@ -314,14 +329,33 @@ export default function CoordinatorTable({
       </div>
 
       {/* Empty State */}
-      {filteredCoordinators.length === 0 && (
+      {filteredCoordinators.length === 0 && !loading && (
         <div className="px-6 py-12 text-center bg-white">
-          <p className="text-gray-500 text-sm">No coordinators found</p>
-          {searchQuery && (
-            <p className="text-gray-400 text-xs mt-1">
-              Try adjusting your search query
+          <div className="max-w-md mx-auto">
+            <p className="text-gray-900 font-medium text-sm mb-2">No staff found</p>
+            <p className="text-gray-500 text-sm mb-4">
+              No staff members with operational permissions were found.
             </p>
-          )}
+            {searchQuery ? (
+              <p className="text-gray-400 text-xs">
+                Try adjusting your search query or filters
+              </p>
+            ) : (
+              <div className="text-left bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                <p className="text-blue-900 text-xs font-medium mb-2">Troubleshooting:</p>
+                <ul className="text-blue-800 text-xs space-y-1 list-disc list-inside">
+                  <li>Staff must have roles with operational permissions (request.create, event.create/update, staff.create/update)</li>
+                  <li>Check that roles have been properly assigned to users</li>
+                  <li>Verify role permissions include the required capabilities</li>
+                </ul>
+                {isAdmin && (
+                  <p className="text-blue-700 text-xs mt-3">
+                    Use the diagnostic endpoint <code className="bg-blue-100 px-1 rounded">GET /api/users/:userId/capabilities</code> to inspect user permissions
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

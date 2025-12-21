@@ -3,12 +3,14 @@
 import { useState, useEffect, useMemo } from "react";
 import { Radio, RadioGroup } from "@heroui/radio";
 import { useRoles } from "@/hooks/useRoles";
+import { roleHasCapability } from "@/services/coordinatorService";
 import type { Role } from "@/types/coordinator.types";
 
 interface RoleAssignmentSectionProps {
   selectedRoleId: string;
   onSelectionChange: (roleId: string) => void;
-  allowedStaffTypes?: string[]; // Role codes that are allowed
+  allowedStaffTypes?: string[]; // Role codes that are allowed (backward compatibility)
+  requiredCapabilities?: string[]; // Required permission capabilities (e.g., ['request.review'])
   isRequired?: boolean;
   error?: string;
 }
@@ -17,23 +19,35 @@ export default function RoleAssignmentSection({
   selectedRoleId,
   onSelectionChange,
   allowedStaffTypes,
+  requiredCapabilities,
   isRequired = true,
   error,
 }: RoleAssignmentSectionProps) {
   const { roles, loading } = useRoles(true); // Always load roles
 
-  // Filter roles based on allowed staff types
+  // Filter roles based on capabilities or allowed staff types
   const availableRoles = useMemo(() => {
-    if (!allowedStaffTypes || allowedStaffTypes.length === 0) {
-      return roles; // Show all if no restrictions
+    let filtered = roles;
+
+    // Priority: Use capability-based filtering if provided
+    if (requiredCapabilities && requiredCapabilities.length > 0) {
+      filtered = roles.filter((role) => {
+        // Role must have at least one of the required capabilities
+        return requiredCapabilities.some((capability) =>
+          roleHasCapability(role, capability)
+        );
+      });
+    } else if (allowedStaffTypes && allowedStaffTypes.length > 0) {
+      // Fallback to role code filtering (backward compatibility)
+      if (allowedStaffTypes.includes("*")) {
+        filtered = roles; // "*" means all roles allowed
+      } else {
+        filtered = roles.filter((role) => allowedStaffTypes.includes(role.code));
+      }
     }
 
-    if (allowedStaffTypes.includes("*")) {
-      return roles; // "*" means all roles allowed
-    }
-
-    return roles.filter((role) => allowedStaffTypes.includes(role.code));
-  }, [roles, allowedStaffTypes]);
+    return filtered;
+  }, [roles, allowedStaffTypes, requiredCapabilities]);
 
   const handleRoleChange = (roleId: string) => {
     onSelectionChange(roleId);

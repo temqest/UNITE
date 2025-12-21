@@ -118,6 +118,112 @@ export async function listStaff(filters?: StaffFilters & {
 }
 
 /**
+ * List staff/users filtered by permission capabilities
+ * @param capabilities - Array of capability strings (e.g., ['request.review', 'request.create'])
+ * @param filters - Optional additional filters
+ * @returns List of users with specified capabilities
+ */
+export async function listStaffByCapability(
+  capabilities: string[],
+  filters?: StaffFilters & {
+    page?: number;
+    limit?: number;
+  }
+): Promise<ListUsersResponse> {
+  const params = new URLSearchParams();
+  
+  // Add capability filters
+  capabilities.forEach(cap => params.append('capability', cap));
+  
+  // Add additional filters
+  if (filters?.organizationType && filters.organizationType.length > 0) {
+    filters.organizationType.forEach(ot => params.append('organizationType', ot));
+  }
+  if (filters?.search) {
+    params.append('search', filters.search);
+  }
+  if (filters?.page) {
+    params.append('page', String(filters.page));
+  }
+  if (filters?.limit) {
+    params.append('limit', String(filters.limit));
+  }
+
+  const queryString = params.toString();
+  const url = `/api/users/by-capability${queryString ? `?${queryString}` : ''}`;
+  
+  return await fetchJsonWithAuth(url);
+}
+
+/**
+ * Get roles filtered by permission capability
+ * @param capability - Capability string (e.g., 'request.review', 'request.create')
+ * @returns List of roles with the specified capability
+ */
+export async function getRolesByCapability(capability: string): Promise<ListRolesResponse> {
+  // For now, fetch all roles and filter client-side
+  // TODO: Add backend endpoint for this if needed
+  const allRoles = await listRoles();
+  
+  if (!allRoles.success || !allRoles.data) {
+    return { success: false, data: [] };
+  }
+
+  const [resource, action] = capability.split('.');
+  
+  const filteredRoles = allRoles.data.filter(role => {
+    if (!role.permissions) return false;
+    
+    return role.permissions.some(perm => {
+      // Check wildcard permissions
+      if (perm.resource === '*' && (perm.actions.includes('*') || perm.actions.includes(action))) {
+        return true;
+      }
+      // Check specific resource permission
+      if (perm.resource === resource && (perm.actions.includes('*') || perm.actions.includes(action))) {
+        return true;
+      }
+      return false;
+    });
+  });
+
+  return {
+    success: true,
+    data: filteredRoles,
+  };
+}
+
+/**
+ * Check if a role has a specific capability
+ * @param role - Role object
+ * @param capability - Capability string (e.g., 'request.review')
+ * @returns True if role has the capability
+ */
+export function roleHasCapability(role: Role, capability: string): boolean {
+  if (!capability || !capability.includes('.')) {
+    return false;
+  }
+
+  const [resource, action] = capability.split('.');
+
+  if (!role.permissions) {
+    return false;
+  }
+
+  return role.permissions.some(perm => {
+    // Check wildcard permissions
+    if (perm.resource === '*' && (perm.actions.includes('*') || perm.actions.includes(action))) {
+      return true;
+    }
+    // Check specific resource permission
+    if (perm.resource === resource && (perm.actions.includes('*') || perm.actions.includes(action))) {
+      return true;
+    }
+    return false;
+  });
+}
+
+/**
  * Get a single user by ID
  */
 export async function getUser(userId: string): Promise<GetUserResponse> {
@@ -126,14 +232,29 @@ export async function getUser(userId: string): Promise<GetUserResponse> {
 
 /**
  * Create a new staff/user
+ * @param data - Staff creation data
+ * @param pageContext - Optional page context ('coordinator-management' or 'stakeholder-management')
  */
-export async function createStaff(data: CreateStaffData): Promise<{ success: boolean; data: User; message?: string }> {
+export async function createStaff(
+  data: CreateStaffData,
+  pageContext?: 'coordinator-management' | 'stakeholder-management'
+): Promise<{ success: boolean; data: User; message?: string }> {
   const { roles, coverageAreaIds, locationIds, ...userData } = data;
+  
+  // Prepare headers with page context if provided
+  const headers: Record<string, string> = {};
+  if (pageContext) {
+    headers['x-page-context'] = pageContext;
+  }
   
   // First, create the user
   const userResponse = await fetchJsonWithAuth('/api/users', {
     method: 'POST',
-    body: JSON.stringify(userData),
+    headers,
+    body: JSON.stringify({
+      ...userData,
+      pageContext, // Also include in body for compatibility
+    }),
   });
 
   if (!userResponse.success || !userResponse.data?._id) {

@@ -417,6 +417,7 @@ export default function AddStaffModal({
                       setRoleError("");
                     }}
                     allowedStaffTypes={allowedStaffTypes.length > 0 ? allowedStaffTypes : undefined}
+                    requiredCapabilities={['request.create', 'event.manage', 'coverage.assign', 'staff.assign']}
                     isRequired
                     error={roleError}
                   />

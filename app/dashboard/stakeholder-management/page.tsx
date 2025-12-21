@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { getUserInfo } from "../../../utils/getUserInfo";
 import { debug, warn } from "../../../utils/devLogger";
+import { listStaffByCapability } from "@/services/coordinatorService";
 
 import Topbar from "@/components/layout/topbar";
 import StakeholderToolbar from "@/components/stakeholder-management/stakeholder-management-toolbar";
@@ -975,99 +976,35 @@ export default function StakeholderManagement() {
                 userInfo.raw.role_data.districtId)))) ||
         null;
 
-      // attach filters as query params when present
-      const params = new URLSearchParams();
-
-      params.set("limit", "1000");
+      // Use capability-based filtering for stakeholders (request.review permission)
       const af = appliedFilters || filters || {};
+      
+      // Build filters for capability-based endpoint
+      const apiFilters: any = {
+        limit: 1000,
+      };
 
-      // If the logged-in user is NOT a system admin (i.e., a coordinator), restrict to their district
-      // unless an explicit filter is applied. Use page-level canManageStakeholders flag which
-      // represents system admin capability.
-      if (af.districtId) params.set("district_id", String(af.districtId));
-      else if (!canManageStakeholders && userDistrictId)
-        params.set("district_id", String(userDistrictId));
-      if (af.province) params.set("province", String(af.province));
-
-      const url = base
-        ? `${base}/api/stakeholders?${params.toString()}`
-        : `/api/stakeholders?${params.toString()}`;
-
-      // Debug: log computed request details so we can verify coordinator filtering
-      try {
-        debug("[fetchStakeholders] request debug", {
-          userInfo:
-            userInfo && Object.keys(userInfo).length
-              ? {
-                  displayName: userInfo.displayName,
-                  role: userInfo.role,
-                  isAdmin: userInfo.isAdmin,
-                }
-              : null,
-          storedUserPreview: user
-            ? {
-                id: user.id || user.ID || user.Stakeholder_ID || null,
-                staffType:
-                  user.StaffType || user.staff_type || user.staffType || null,
-                role_data: user.role_data || null,
-              }
-            : null,
-          canManageStakeholders,
-          fetchIsCoordinator,
-          userDistrictId,
-          params: params.toString(),
-          url,
-          tokenPresent: !!token,
-        });
-      } catch (e) {}
-
-      const headers: any = {};
-
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      let res = await fetch(url, { headers });
-
-      // If the admin-specific endpoint isn't implemented on some backends
-      // the server may return a 404 HTML page. In that case automatically
-      // retry the generic `/api/stakeholders` endpoint as a graceful
-      // fallback so the UI still works and doesn't surface an internal
-      // route-not-found message to the user.
-      if (!res.ok && res.status === 404 && useAdminEndpoint) {
-        try {
-          const fallbackUrl = base
-            ? `${base}/api/stakeholders?${params.toString()}`
-            : `/api/stakeholders?${params.toString()}`;
-
-          res = await fetch(fallbackUrl, { headers });
-        } catch (e) {
-          // ignore fallback network errors and continue to parse original response
-        }
+      // Add district filter if specified
+      if (af.districtId) {
+        apiFilters.districtId = String(af.districtId);
+      } else if (!canManageStakeholders && userDistrictId) {
+        apiFilters.districtId = String(userDistrictId);
       }
 
-      // Read as text first to avoid JSON parse errors when the server returns HTML (like a 404 page)
-      const text = await res.text();
-      let json: any = null;
-
-      try {
-        json = text ? JSON.parse(text) : null;
-      } catch (parseErr) {
-        // If response is not valid JSON, include a short snippet in the error to help debugging
-        const snippet = text.slice(0, 300);
-
-        throw new Error(
-          "Failed to fetch stakeholders (unexpected server response)",
-        );
+      // Add province filter if specified
+      if (af.province) {
+        apiFilters.province = String(af.province);
       }
 
-      if (!res.ok) {
-        // Prefer backend message when safe, but avoid echoing internal route
-        // diagnostics to users. Provide a simple, actionable message.
-        throw new Error(
-          "Failed to fetch stakeholders. Please try again later.",
-        );
+      // Use capability-based endpoint to get users with request.review permission
+      const response = await listStaffByCapability(['request.review'], apiFilters);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || "Failed to fetch stakeholders");
       }
 
-      // backend stakeholder list returns items with First_Name, Middle_Name, Last_Name, Email, Phone_Number, Province_Name, District_ID or District_Name
-      const items = json.data || json.stakeholders || [];
+      // Transform response data to match expected format
+      const items = response.data || [];
 
       // Debug: log which district IDs are present in the response
       try {
@@ -2088,7 +2025,7 @@ export default function StakeholderManagement() {
 
       {/* Page Header */}
       <div className="px-4 sm:px-6 pt-6 pb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Stakeholder <span className="hidden md:inline">Management</span></h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Stakeholders <span className="hidden md:inline">(Review & Approval)</span></h1>
         {/* MobileNav component renders hamburger and notifications on small screens */}
       </div>
 
