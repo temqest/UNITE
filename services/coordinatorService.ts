@@ -247,36 +247,64 @@ export async function createStaff(
     headers['x-page-context'] = pageContext;
   }
   
-  // First, create the user
-  const userResponse = await fetchJsonWithAuth('/api/users', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      ...userData,
-      pageContext, // Also include in body for compatibility
-    }),
-  });
+  // Create the user with roles and coverage areas in initial request (atomic)
+  let userResponse;
+  try {
+    console.log('[createStaff] Sending user creation request:', {
+      email: userData.email,
+      roles: roles || [],
+      coverageAreaIds: coverageAreaIds || [],
+      pageContext
+    });
+    
+    userResponse = await fetchJsonWithAuth('/api/users', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        ...userData,
+        roles: roles || [], // Include roles in initial request for atomic creation
+        coverageAreaIds: coverageAreaIds || [], // Include coverage areas in initial request
+        pageContext, // Also include in body for compatibility
+      }),
+    });
+
+    console.log('[createStaff] User creation response:', {
+      success: userResponse.success,
+      hasUserId: !!userResponse.data?._id,
+      message: userResponse.message
+    });
+  } catch (error: any) {
+    // Log error details for debugging
+    console.error('[createStaff] User creation failed:', {
+      error: error.message,
+      response: error.response,
+      body: error.body,
+      status: error.response?.status
+    });
+    
+    // Re-throw with more context
+    const errorMessage = error.body?.message || 
+                        error.body?.errors?.join(', ') || 
+                        error.message || 
+                        'Failed to create user';
+    throw new Error(errorMessage);
+  }
 
   if (!userResponse.success || !userResponse.data?._id) {
-    throw new Error(userResponse.message || 'Failed to create user');
+    const errorMessage = userResponse.message || 'Failed to create user';
+    console.error('[createStaff] User creation returned unsuccessful response:', {
+      success: userResponse.success,
+      message: errorMessage,
+      data: userResponse.data
+    });
+    throw new Error(errorMessage);
   }
 
   const userId = userResponse.data._id;
 
-  // Then assign roles
-  if (roles && roles.length > 0) {
-    for (const roleId of roles) {
-      try {
-        await fetchJsonWithAuth(`/api/users/${userId}/roles`, {
-          method: 'POST',
-          body: JSON.stringify({ roleId }),
-        });
-      } catch (error) {
-        console.error(`Failed to assign role ${roleId}:`, error);
-        // Continue with other roles even if one fails
-      }
-    }
-  }
+  // Roles are now assigned atomically during user creation, so we don't need separate calls
+  // However, we still assign coverage areas separately if they weren't handled in the initial request
+  // (for backward compatibility and to handle cases where backend doesn't process coverageAreaIds)
 
   // Then assign coverage areas
   if (coverageAreaIds && coverageAreaIds.length > 0) {
@@ -401,9 +429,15 @@ export async function getAllowedStaffTypes(userId: string): Promise<AllowedStaff
 
 /**
  * Get assignable roles for current user (filtered by authority)
+ * @param context - Optional context ('coordinator-management' or 'stakeholder-management')
  */
-export async function getAssignableRoles(): Promise<ListRolesResponse> {
-  return await fetchJsonWithAuth('/api/rbac/authority/assignable-roles');
+export async function getAssignableRoles(context?: 'coordinator-management' | 'stakeholder-management'): Promise<ListRolesResponse> {
+  const params = new URLSearchParams();
+  if (context) {
+    params.append('context', context);
+  }
+  const queryString = params.toString();
+  return await fetchJsonWithAuth(`/api/rbac/authority/assignable-roles${queryString ? `?${queryString}` : ''}`);
 }
 
 /**

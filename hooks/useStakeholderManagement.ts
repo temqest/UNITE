@@ -6,13 +6,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { fetchJsonWithAuth } from '@/utils/fetchWithAuth';
-import type { CoverageArea, Organization } from './useCoverageAreas';
+import type { Organization } from './useCoverageAreas';
+import type { Location } from './useLocations';
 
 export interface CreationContext {
   allowedRole: string;
-  canChooseCoverage: boolean;
+  canChooseMunicipality: boolean;
   canChooseOrganization: boolean;
-  coverageOptions: CoverageArea[];
+  municipalityOptions: Location[];
+  barangayOptions: Location[];
   organizationOptions: Organization[];
   isSystemAdmin: boolean;
 }
@@ -20,9 +22,10 @@ export interface CreationContext {
 export interface UseStakeholderManagementReturn {
   // State (from backend)
   allowedRole: string;
-  canChooseCoverage: boolean;
+  canChooseMunicipality: boolean;
   canChooseOrganization: boolean;
-  coverageOptions: CoverageArea[];
+  municipalityOptions: Location[];
+  barangayOptions: Location[];
   organizationOptions: Organization[];
   isSystemAdmin: boolean;
   loading: boolean;
@@ -30,21 +33,23 @@ export interface UseStakeholderManagementReturn {
   
   // Actions
   fetchCreationContext: () => Promise<void>;
+  fetchBarangays: (municipalityId: string) => Promise<void>;
   
   // Legacy compatibility (for existing components)
   assignableRoles: never[]; // Always empty - role is forced to stakeholder
-  creatorCoverageAreas: CoverageArea[]; // Alias for coverageOptions
+  creatorCoverageAreas: Location[]; // Alias for municipalityOptions (for backward compatibility)
   allowedOrganizations: Organization[]; // Alias for organizationOptions
   canAssignRole: (roleId: string) => boolean; // Always returns false (no role selection)
-  canSelectCoverageArea: (coverageAreaId: string) => boolean;
+  canSelectCoverageArea: (coverageAreaId: string) => boolean; // Deprecated - use municipality
   canSelectOrganization: (organizationId: string) => boolean;
 }
 
 export function useStakeholderManagement(): UseStakeholderManagementReturn {
   const [allowedRole, setAllowedRole] = useState<string>('stakeholder');
-  const [canChooseCoverage, setCanChooseCoverage] = useState<boolean>(false);
+  const [canChooseMunicipality, setCanChooseMunicipality] = useState<boolean>(false);
   const [canChooseOrganization, setCanChooseOrganization] = useState<boolean>(false);
-  const [coverageOptions, setCoverageOptions] = useState<CoverageArea[]>([]);
+  const [municipalityOptions, setMunicipalityOptions] = useState<Location[]>([]);
+  const [barangayOptions, setBarangayOptions] = useState<Location[]>([]);
   const [organizationOptions, setOrganizationOptions] = useState<Organization[]>([]);
   const [isSystemAdmin, setIsSystemAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -63,18 +68,20 @@ export function useStakeholderManagement(): UseStakeholderManagementReturn {
       if (response.success && response.data) {
         const context: CreationContext = response.data;
         setAllowedRole(context.allowedRole);
-        setCanChooseCoverage(context.canChooseCoverage);
+        setCanChooseMunicipality(context.canChooseMunicipality);
         setCanChooseOrganization(context.canChooseOrganization);
-        setCoverageOptions(context.coverageOptions || []);
+        setMunicipalityOptions(context.municipalityOptions || []);
+        setBarangayOptions(context.barangayOptions || []);
         setOrganizationOptions(context.organizationOptions || []);
         setIsSystemAdmin(context.isSystemAdmin);
         
         // Diagnostic logging
         console.log('[DIAG] Stakeholder Creation Context:', {
           allowedRole: context.allowedRole,
-          canChooseCoverage: context.canChooseCoverage,
+          canChooseMunicipality: context.canChooseMunicipality,
           canChooseOrganization: context.canChooseOrganization,
-          coverageOptionsCount: context.coverageOptions?.length || 0,
+          municipalityOptionsCount: context.municipalityOptions?.length || 0,
+          barangayOptionsCount: context.barangayOptions?.length || 0,
           organizationOptionsCount: context.organizationOptions?.length || 0,
           isSystemAdmin: context.isSystemAdmin
         });
@@ -97,17 +104,40 @@ export function useStakeholderManagement(): UseStakeholderManagementReturn {
   }, []);
 
   /**
-   * Check if a coverage area can be selected
+   * Fetch barangays for a municipality
+   */
+  const fetchBarangays = useCallback(async (municipalityId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetchJsonWithAuth(`/api/stakeholders/barangays/${municipalityId}`);
+      
+      if (response.success && response.data) {
+        setBarangayOptions(response.data || []);
+        console.log('[DIAG] Fetched barangays:', {
+          municipalityId,
+          barangayCount: response.data?.length || 0
+        });
+      } else {
+        throw new Error(response.message || 'Failed to fetch barangays');
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch barangays:', err);
+      setError(err.message || 'Failed to fetch barangays');
+      setBarangayOptions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Check if a coverage area can be selected (deprecated - use municipality)
    */
   const canSelectCoverageArea = useCallback((coverageAreaId: string): boolean => {
-    if (canChooseCoverage) {
-      return true; // System admin can choose any
-    }
-    return coverageOptions.some(ca => {
-      const id = ca._id || ca.id;
-      return String(id) === String(coverageAreaId);
-    });
-  }, [canChooseCoverage, coverageOptions]);
+    // Legacy compatibility - always return true for municipality-based selection
+    return true;
+  }, []);
 
   /**
    * Check if an organization can be selected
@@ -130,18 +160,20 @@ export function useStakeholderManagement(): UseStakeholderManagementReturn {
   return {
     // New API (from backend)
     allowedRole,
-    canChooseCoverage,
+    canChooseMunicipality,
     canChooseOrganization,
-    coverageOptions,
+    municipalityOptions,
+    barangayOptions,
     organizationOptions,
     isSystemAdmin,
     loading,
     error,
     fetchCreationContext,
+    fetchBarangays,
     
     // Legacy compatibility
     assignableRoles: [], // Always empty - role is forced to stakeholder
-    creatorCoverageAreas: coverageOptions, // Alias for coverageOptions
+    creatorCoverageAreas: municipalityOptions, // Alias for municipalityOptions (for backward compatibility)
     allowedOrganizations: organizationOptions, // Alias for organizationOptions
     canAssignRole,
     canSelectCoverageArea,

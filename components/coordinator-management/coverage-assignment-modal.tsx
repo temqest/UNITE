@@ -22,6 +22,7 @@ interface CoverageAssignmentModalProps {
   onConfirm: (coverageAreaIds: string[], locationIds: string[]) => void;
   initialLocationIds?: string[];
   initialCoverageAreaIds?: string[];
+  hideBarangays?: boolean; // Hide barangay-level locations (for coordinator creation)
 }
 
 export default function CoverageAssignmentModal({
@@ -30,6 +31,7 @@ export default function CoverageAssignmentModal({
   onConfirm,
   initialLocationIds = [],
   initialCoverageAreaIds = [],
+  hideBarangays = false,
 }: CoverageAssignmentModalProps) {
   const { flat: locations, loading: locationsLoading } = useLocations(isOpen);
   const [selectedLocationIds, setSelectedLocationIds] = useState<Set<string>>(
@@ -44,11 +46,16 @@ export default function CoverageAssignmentModal({
 
   // Build hierarchical structure: Districts with nested municipalities
   const hierarchicalLocations = useMemo(() => {
+    // Filter out barangays if hideBarangays is true
+    const filteredLocations = hideBarangays 
+      ? locations.filter(loc => loc.type !== 'barangay')
+      : locations;
+    
     // Create a map of all locations by ID
     const locationMap = new Map<string, Location & { children: Location[] }>();
     
     // First, create entries for all locations
-    locations.forEach((loc) => {
+    filteredLocations.forEach((loc) => {
       locationMap.set(loc._id, { ...loc, children: [] });
     });
 
@@ -59,13 +66,13 @@ export default function CoverageAssignmentModal({
     const districtsInProvinces = new Set<string>(); // Track districts that belong to provinces
 
     // First pass: Build provinces and their districts
-    locations.forEach((loc) => {
+    filteredLocations.forEach((loc) => {
       if (loc.type === 'province') {
         // This is a province
         const province = { ...loc, children: [] as Array<Location & { children: Location[] }> };
         
         // Find districts that belong to this province
-        locations.forEach((district) => {
+        filteredLocations.forEach((district) => {
           const distParentId = typeof district.parent === 'string' 
             ? district.parent 
             : district.parent?._id;
@@ -76,7 +83,7 @@ export default function CoverageAssignmentModal({
             districtsInProvinces.add(district._id); // Mark this district as belonging to a province
             
             // Find municipalities for this district
-            locations.forEach((municipality) => {
+            filteredLocations.forEach((municipality) => {
               const munParentId = typeof municipality.parent === 'string' 
                 ? municipality.parent 
                 : municipality.parent?._id;
@@ -97,7 +104,7 @@ export default function CoverageAssignmentModal({
     });
 
     // Second pass: Build standalone districts (not in provinces) and other locations
-    locations.forEach((loc) => {
+    filteredLocations.forEach((loc) => {
       const parentId = typeof loc.parent === 'string' ? loc.parent : loc.parent?._id;
       
       if (loc.type === 'district' || (loc.type === 'city' && loc.metadata?.isCity)) {
@@ -107,7 +114,7 @@ export default function CoverageAssignmentModal({
           districts.push(district);
           
           // Find municipalities that belong to this district
-          locations.forEach((municipality) => {
+          filteredLocations.forEach((municipality) => {
             const munParentId = typeof municipality.parent === 'string' 
               ? municipality.parent 
               : municipality.parent?._id;
@@ -125,8 +132,8 @@ export default function CoverageAssignmentModal({
         if (!parentId || !locationMap.has(parentId)) {
           standaloneLocations.push(loc);
         }
-      } else if (loc.type !== 'province') {
-        // Other types (barangay, custom, etc.) - but not provinces (already handled)
+      } else if (loc.type !== 'province' && loc.type !== 'barangay') {
+        // Other types (custom, etc.) - but not provinces (already handled) and not barangays (filtered if hideBarangays)
         standaloneLocations.push(loc);
       }
     });
@@ -141,7 +148,7 @@ export default function CoverageAssignmentModal({
       districts,
       standaloneLocations,
     };
-  }, [locations]);
+  }, [locations, hideBarangays]);
 
   // Filter hierarchical locations by search query
   const filteredHierarchicalLocations = useMemo(() => {
@@ -438,6 +445,7 @@ export default function CoverageAssignmentModal({
                 }}
                 radius="lg"
                 variant="bordered"
+                isDisabled={locationsLoading}
               />
 
               {/* Selected Count */}
@@ -449,8 +457,18 @@ export default function CoverageAssignmentModal({
 
               {/* Location Selection - Hierarchical Structure */}
               <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                {/* Show Districts with nested Municipalities */}
-                {filteredHierarchicalLocations.districts.length > 0 && (
+                {/* Loading State */}
+                {locationsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                    <div className="relative">
+                      <div className="w-12 h-12 border-4 border-gray-200 border-t-gray-600 rounded-full animate-spin"></div>
+                    </div>
+                    <p className="text-sm text-gray-600">Loading locations...</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Show Districts with nested Municipalities */}
+                    {filteredHierarchicalLocations.districts.length > 0 && (
                   <div className="space-y-3">
                     {filteredHierarchicalLocations.districts.map((district) => {
                       const districtSelected = selectedLocationIds.has(district._id);
@@ -604,6 +622,8 @@ export default function CoverageAssignmentModal({
                       ))}
                     </div>
                   </div>
+                )}
+                  </>
                 )}
               </div>
 

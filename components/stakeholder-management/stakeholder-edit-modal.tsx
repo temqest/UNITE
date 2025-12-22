@@ -23,9 +23,9 @@ export default function EditStakeholderModal({
   onSaved,
 }: EditStakeholderModalProps) {
   const {
-    coverageOptions,
+    municipalityOptions,
     organizationOptions,
-    canChooseCoverage,
+    canChooseMunicipality,
     canChooseOrganization,
     isSystemAdmin,
     loading: hookLoading,
@@ -154,11 +154,13 @@ export default function EditStakeholderModal({
         organizationInstitution: organization || undefined,
       }
 
-      // Only system admin can change organization and coverage area
+      // Only system admin can change organization and location
       if (canChooseOrganization && organizationId) {
         payload.organizationId = organizationId
       }
-      if (canChooseCoverage && coverageAreaId) {
+      // Note: For stakeholders, location changes should use municipalityId/barangayId
+      // This coverageAreaId is kept for backward compatibility with existing data
+      if (canChooseMunicipality && coverageAreaId) {
         payload.coverageAreaId = coverageAreaId
       }
 
@@ -198,10 +200,10 @@ export default function EditStakeholderModal({
   useEffect(() => {
     if (isOpen) {
       console.log('[DIAG] Edit Modal Field States:', {
-        canChooseCoverage,
+        canChooseMunicipality,
         canChooseOrganization,
         isSystemAdmin,
-        coverageOptionsCount: coverageOptions.length,
+        municipalityOptionsCount: municipalityOptions.length,
         organizationOptionsCount: organizationOptions.length,
         stakeholderOrganizationId: organizationId,
         stakeholderCoverageAreaId: coverageAreaId,
@@ -212,7 +214,7 @@ export default function EditStakeholderModal({
         } : null
       });
     }
-  }, [isOpen, hookLoading, canChooseCoverage, canChooseOrganization, isSystemAdmin, coverageOptions.length, organizationOptions.length, organizationId, coverageAreaId, stakeholderData]);
+  }, [isOpen, hookLoading, canChooseMunicipality, canChooseOrganization, isSystemAdmin, municipalityOptions.length, organizationOptions.length, organizationId, coverageAreaId, stakeholderData]);
 
   return (
     <Modal isOpen={isOpen} placement="center" scrollBehavior="inside" size="xl" onClose={onClose}>
@@ -354,54 +356,36 @@ export default function EditStakeholderModal({
               />
             </div>
 
-            {/* Coverage Area */}
+            {/* Location (Municipality/Barangay) - Display only for edit */}
             <div>
               <label className="text-sm font-semibold text-gray-900 mb-2 block">
-                Coverage Area
+                Location
               </label>
-              {canChooseCoverage ? (
-                <Select
-                  placeholder="Select Coverage Area"
-                  selectedKeys={coverageAreaId ? new Set([coverageAreaId]) : new Set()}
-                  isDisabled={hookLoading}
-                  description="System administrators can change coverage area"
-                  onSelectionChange={(keys: any) => {
-                    const caId = Array.from(keys)[0] as string
-                    setCoverageAreaId(caId)
-                  }}
-                >
-                  {coverageOptions.map((ca) => {
-                    const caId = ca._id
-                    const caName = ca.name || String(caId)
-                    return (
-                      <SelectItem key={String(caId)} textValue={caName}>
-                        {caName}
-                      </SelectItem>
+              <Input
+                disabled
+                classNames={{ inputWrapper: "h-10 bg-gray-100" }}
+                type="text"
+                value={(() => {
+                  if (!coverageAreaId && !stakeholderData?.locations) return "Not set"
+                  // Try to find in municipalityOptions first
+                  if (municipalityOptions.length > 0) {
+                    const location = municipalityOptions.find((loc: { _id: string; id?: string; name?: string }) => 
+                      String(loc._id || loc.id) === String(coverageAreaId)
                     )
-                  })}
-                </Select>
-              ) : (
-                <Input
-                  disabled
-                  classNames={{ inputWrapper: "h-10 bg-gray-100" }}
-                  type="text"
-                  value={(() => {
-                    if (!coverageAreaId) return ""
-                    // Try to find in coverageOptions first
-                    const ca = coverageOptions.find((a) => 
-                      String(a._id) === String(coverageAreaId)
+                    if (location) return location.name || String(coverageAreaId)
+                  }
+                  // Fallback to creatorCoverageAreas for legacy compatibility
+                  if (creatorCoverageAreas.length > 0) {
+                    const caLegacy = creatorCoverageAreas.find((loc: { _id: string; id?: string; name?: string }) => 
+                      String(loc._id || loc.id) === String(coverageAreaId)
                     )
-                    if (ca) return ca.name || String(coverageAreaId)
-                    // Fallback to creatorCoverageAreas for legacy compatibility
-                    const caLegacy = creatorCoverageAreas.find((a) => 
-                      String(a._id) === String(coverageAreaId)
-                    )
-                    return caLegacy?.name || String(coverageAreaId)
-                  })()}
-                  variant="bordered"
-                  description="Coverage area cannot be changed"
-                />
-              )}
+                    if (caLegacy) return caLegacy.name || String(coverageAreaId)
+                  }
+                  return coverageAreaId ? String(coverageAreaId) : "Not set"
+                })()}
+                variant="bordered"
+                description="Location cannot be changed in edit mode"
+              />
             </div>
 
             {/* Organization */}

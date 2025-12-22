@@ -27,17 +27,19 @@ export default function AddStakeholderModal({
   onClearError = undefined,
 }: AddStakeholderModalProps) {
   const {
-    coverageOptions,
+    municipalityOptions,
+    barangayOptions,
     organizationOptions,
-    canChooseCoverage,
+    canChooseMunicipality,
     canChooseOrganization,
     isSystemAdmin,
-    canSelectCoverageArea,
     canSelectOrganization,
     loading: hookLoading,
+    fetchBarangays,
   } = useStakeholderManagement()
 
-  const [selectedCoverageArea, setSelectedCoverageArea] = useState<string>("")
+  const [selectedMunicipality, setSelectedMunicipality] = useState<string>("")
+  const [selectedBarangay, setSelectedBarangay] = useState<string>("")
   const [selectedOrganization, setSelectedOrganization] = useState<string>("")
   const [showPassword, setShowPassword] = useState(false)
   const [showRetypePassword, setShowRetypePassword] = useState(false)
@@ -58,32 +60,34 @@ export default function AddStakeholderModal({
     }
   }, [canChooseOrganization, organizationOptions, selectedOrganization])
 
-  // Set default coverage area if only one available
+  // Fetch barangays when municipality is selected
   useEffect(() => {
-    if (coverageOptions.length === 1) {
-      const ca = coverageOptions[0]
-      const caId = ca._id
-      if (caId) {
-        setSelectedCoverageArea(String(caId))
-      }
+    if (selectedMunicipality) {
+      fetchBarangays(selectedMunicipality)
+      // Reset barangay selection when municipality changes
+      setSelectedBarangay("")
+    } else {
+      setSelectedBarangay("")
     }
-  }, [coverageOptions])
+  }, [selectedMunicipality, fetchBarangays])
 
   // Diagnostic logging for field states
   useEffect(() => {
     if (isOpen) {
       console.log('[DIAG] Add Stakeholder Modal - Field States:', {
-        canChooseCoverage,
+        canChooseMunicipality,
         canChooseOrganization,
         isSystemAdmin,
-        coverageOptionsCount: coverageOptions.length,
+        municipalityOptionsCount: municipalityOptions.length,
+        barangayOptionsCount: barangayOptions.length,
         organizationOptionsCount: organizationOptions.length,
-        selectedCoverageArea: selectedCoverageArea || 'none',
+        selectedMunicipality: selectedMunicipality || 'none',
+        selectedBarangay: selectedBarangay || 'none',
         selectedOrganization: selectedOrganization || 'none',
         role: 'stakeholder (forced)'
       });
     }
-  }, [isOpen, hookLoading, canChooseCoverage, canChooseOrganization, isSystemAdmin, coverageOptions.length, organizationOptions.length, selectedCoverageArea, selectedOrganization]);
+  }, [isOpen, hookLoading, canChooseMunicipality, canChooseOrganization, isSystemAdmin, municipalityOptions.length, barangayOptions.length, organizationOptions.length, selectedMunicipality, selectedBarangay, selectedOrganization]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -103,14 +107,8 @@ export default function AddStakeholderModal({
       return
     }
 
-    if (!selectedCoverageArea) {
-      alert("Please select a coverage area.")
-      return
-    }
-
-    // Validate coverage area is within jurisdiction
-    if (!canSelectCoverageArea(selectedCoverageArea)) {
-      alert("Selected coverage area is outside your jurisdiction.")
+    if (!selectedMunicipality) {
+      alert("Please select a municipality.")
       return
     }
 
@@ -142,10 +140,12 @@ export default function AddStakeholderModal({
       email,
       phoneNumber: phoneNumber || undefined,
       password,
-      roleCode: 'stakeholder', // Always stakeholder for stakeholder-management page
-      coverageAreaId: selectedCoverageArea,
+      roles: ['stakeholder'], // Always stakeholder for stakeholder-management page
+      municipalityId: selectedMunicipality,
+      barangayId: selectedBarangay || undefined, // Optional
       organizationId: finalOrganizationId,
       organizationInstitution: organizationInstitution || undefined,
+      pageContext: 'stakeholder-management', // Important: tells backend this is stakeholder creation
     }
 
     console.log('[DIAG] Add Modal - Submitting data:', {
@@ -353,45 +353,86 @@ export default function AddStakeholderModal({
                 </div>
               </div>
 
-              {/* Coverage Area Selection */}
+              {/* Municipality Selection */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-900">
-                  Coverage Area <span className="text-red-500">*</span>
+                  Municipality <span className="text-red-500">*</span>
                 </label>
                 <Select
                   isRequired
                   classNames={{
                     trigger: "border-gray-300",
                   }}
-                  placeholder={hookLoading ? "Loading..." : canChooseCoverage ? "Select a coverage area" : "Select a coverage area within your jurisdiction"}
-                  name="coverageArea"
+                  placeholder={hookLoading ? "Loading..." : canChooseMunicipality ? "Select a municipality" : "Select a municipality within your jurisdiction"}
+                  name="municipality"
                   radius="md"
-                  selectedKeys={selectedCoverageArea ? new Set([selectedCoverageArea]) : new Set()}
+                  selectedKeys={selectedMunicipality ? new Set([selectedMunicipality]) : new Set()}
                   size="md"
                   variant="bordered"
-                  isDisabled={hookLoading || (!canChooseCoverage && coverageOptions.length === 0)}
-                  description={!canChooseCoverage ? "You can only select coverage areas within your jurisdiction" : undefined}
+                  isDisabled={hookLoading || (!canChooseMunicipality && municipalityOptions.length === 0)}
+                  description={!canChooseMunicipality ? "You can only select municipalities within your jurisdiction" : undefined}
                   onSelectionChange={(keys: any) => {
-                    const caId = Array.from(keys)[0] as string
-                    setSelectedCoverageArea(caId)
+                    const muniId = Array.from(keys)[0] as string
+                    setSelectedMunicipality(muniId)
                   }}
                 >
-                  {coverageOptions.map((ca) => {
-                    const caId = ca._id || ca.id
-                    const caName = ca.name || String(caId)
+                  {municipalityOptions.map((muni) => {
+                    const muniId = muni._id || muni.id
+                    const muniName = muni.name || String(muniId)
                     return (
-                      <SelectItem key={String(caId)} textValue={caName}>
-                        {caName}
+                      <SelectItem key={String(muniId)} textValue={muniName}>
+                        {muniName}
                       </SelectItem>
                     )
                   })}
                 </Select>
-                {coverageOptions.length === 0 && !hookLoading && (
+                {municipalityOptions.length === 0 && !hookLoading && (
                   <p className="text-xs text-gray-500">
-                    No coverage areas available. Contact an administrator to assign coverage areas to your account.
+                    No municipalities available. Contact an administrator to assign coverage areas to your account.
                   </p>
                 )}
               </div>
+
+              {/* Barangay Selection (Optional) */}
+              {selectedMunicipality && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-900">
+                    Barangay <span className="text-gray-500 text-xs">(Optional)</span>
+                  </label>
+                  <Select
+                    classNames={{
+                      trigger: "border-gray-300",
+                    }}
+                    placeholder={hookLoading ? "Loading barangays..." : barangayOptions.length === 0 ? "No barangays available" : "Select a barangay (Optional)"}
+                    name="barangay"
+                    radius="md"
+                    selectedKeys={selectedBarangay ? new Set([selectedBarangay]) : new Set()}
+                    size="md"
+                    variant="bordered"
+                    isDisabled={hookLoading || barangayOptions.length === 0}
+                    description="Barangay selection is optional"
+                    onSelectionChange={(keys: any) => {
+                      const barangayId = Array.from(keys)[0] as string
+                      setSelectedBarangay(barangayId)
+                    }}
+                  >
+                    {barangayOptions.map((barangay) => {
+                      const barangayId = barangay._id || barangay.id
+                      const barangayName = barangay.name || String(barangayId)
+                      return (
+                        <SelectItem key={String(barangayId)} textValue={barangayName}>
+                          {barangayName}
+                        </SelectItem>
+                      )
+                    })}
+                  </Select>
+                  {barangayOptions.length === 0 && selectedMunicipality && !hookLoading && (
+                    <p className="text-xs text-gray-500">
+                      No barangays available for this municipality.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Organization Selection */}
               <div className="space-y-2">

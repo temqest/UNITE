@@ -57,6 +57,10 @@ export default function AddStaffModal({
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
   const [selectedCoverageAreaIds, setSelectedCoverageAreaIds] = useState<string[]>([]);
   const [coverageError, setCoverageError] = useState("");
+  
+  // Submission state (local to prevent double submissions)
+  const [isSubmittingLocal, setIsSubmittingLocal] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Load allowed staff types on mount
   useEffect(() => {
@@ -86,30 +90,45 @@ export default function AddStaffModal({
       setCoverageError("");
       setShowPassword(false);
       setShowRetypePassword(false);
+      setIsSubmittingLocal(false);
+      setSubmitError(null);
     }
   }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
+    // Prevent double submission
+    if (isSubmittingLocal || isSubmitting) {
+      console.warn('[AddStaffModal] Submission already in progress, ignoring duplicate submit');
+      return;
+    }
+    
+    // Clear previous errors
+    setSubmitError(null);
+    setRoleError("");
+    setCoverageError("");
+    
     // Validation
     if (password !== retypePassword) {
-      alert("Passwords do not match!");
+      setSubmitError("Passwords do not match!");
       return;
     }
 
     if (password.length < 6) {
-      alert("Password must be at least 6 characters long");
+      setSubmitError("Password must be at least 6 characters long");
       return;
     }
 
     if (!selectedRoleId) {
       setRoleError("A role must be selected");
+      setSubmitError("Please select a role");
       return;
     }
 
     if (selectedCoverageAreaIds.length === 0 && selectedLocationIds.length === 0) {
       setCoverageError("Please assign at least one coverage area");
+      setSubmitError("Please assign at least one coverage area");
       return;
     }
 
@@ -131,11 +150,36 @@ export default function AddStaffModal({
         : undefined,
     };
 
+    // Set submitting state immediately to prevent duplicate submissions
+    setIsSubmittingLocal(true);
+    
     try {
+      console.log('[AddStaffModal] Starting staff creation:', { email, roles: data.roles, coverageAreaIds: data.coverageAreaIds });
       await onSubmit(data);
+      console.log('[AddStaffModal] Staff creation successful');
       onClose();
     } catch (err: any) {
-      alert(err.message || "Failed to create staff member");
+      // Log error for debugging
+      console.error('[AddStaffModal] Staff creation failed:', {
+        error: err,
+        message: err?.message,
+        response: err?.response,
+        body: err?.body
+      });
+      
+      // Extract error message
+      const errorMessage = err?.body?.message || 
+                          err?.body?.errors?.join(', ') || 
+                          err?.message || 
+                          "Failed to create staff member";
+      
+      setSubmitError(errorMessage);
+      
+      // Don't rethrow - error is handled and displayed
+      // This prevents the parent from trying to handle it again
+    } finally {
+      // Always reset submitting state, even on error
+      setIsSubmittingLocal(false);
     }
   };
 
@@ -170,7 +214,16 @@ export default function AddStaffModal({
       >
         <ModalContent>
           {(onClose) => (
-            <form onSubmit={handleSubmit} className="flex flex-col h-full">
+            <form 
+              onSubmit={handleSubmit} 
+              className="flex flex-col h-full"
+              onKeyDown={(e) => {
+                // Prevent form submission on Enter if already submitting
+                if ((isSubmitting || isSubmittingLocal) && e.key === 'Enter') {
+                  e.preventDefault();
+                }
+              }}
+            >
               {/* Custom Header */}
               <div className="flex items-start justify-between px-6 pt-4 pb-2 border-b border-gray-200">
                 <div className="flex items-start gap-2.5">
@@ -187,13 +240,21 @@ export default function AddStaffModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="text-gray-400 hover:text-gray-600 transition-colors p-0.5"
+                  disabled={isSubmitting || isSubmittingLocal}
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               <ModalBody className="gap-3.5 px-6 py-4 max-h-[70vh] overflow-y-auto flex-1">
+                {/* Error Display */}
+                {submitError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="text-sm text-red-800 font-medium">Error</div>
+                    <div className="text-sm text-red-600 mt-1">{submitError}</div>
+                  </div>
+                )}
                 {/* Section 1: Personal Information */}
                 <div className="space-y-3.5">
                   <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
@@ -210,6 +271,7 @@ export default function AddStaffModal({
                         isRequired
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
+                        isDisabled={isSubmitting || isSubmittingLocal}
                         classNames={{
                           inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
                           input: "text-sm placeholder:text-gray-400",
@@ -221,6 +283,7 @@ export default function AddStaffModal({
                       <Input
                         value={middleName}
                         onChange={(e) => setMiddleName(e.target.value)}
+                        isDisabled={isSubmitting || isSubmittingLocal}
                         classNames={{
                           inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
                           input: "text-sm placeholder:text-gray-400",
@@ -233,6 +296,7 @@ export default function AddStaffModal({
                         isRequired
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
+                        isDisabled={isSubmitting || isSubmittingLocal}
                         classNames={{
                           inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
                           input: "text-sm placeholder:text-gray-400",
@@ -254,6 +318,7 @@ export default function AddStaffModal({
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      isDisabled={isSubmitting || isSubmittingLocal}
                       classNames={{
                         inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
                         input: "text-sm placeholder:text-gray-400",
@@ -273,6 +338,7 @@ export default function AddStaffModal({
                       type="tel"
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
+                      isDisabled={isSubmitting || isSubmittingLocal}
                       classNames={{
                         inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
                         input: "text-sm placeholder:text-gray-400",
@@ -294,6 +360,7 @@ export default function AddStaffModal({
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        isDisabled={isSubmitting || isSubmittingLocal}
                         classNames={{
                           inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
                           input: "text-sm placeholder:text-gray-400",
@@ -303,6 +370,7 @@ export default function AddStaffModal({
                             className="focus:outline-none"
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
+                            disabled={isSubmitting || isSubmittingLocal}
                           >
                             {showPassword ? (
                               <EyeOff className="w-4 h-4 text-gray-400" />
@@ -326,6 +394,7 @@ export default function AddStaffModal({
                         type={showRetypePassword ? "text" : "password"}
                         value={retypePassword}
                         onChange={(e) => setRetypePassword(e.target.value)}
+                        isDisabled={isSubmitting || isSubmittingLocal}
                         classNames={{
                           inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
                           input: "text-sm placeholder:text-gray-400",
@@ -335,6 +404,7 @@ export default function AddStaffModal({
                             className="focus:outline-none"
                             type="button"
                             onClick={() => setShowRetypePassword(!showRetypePassword)}
+                            disabled={isSubmitting || isSubmittingLocal}
                           >
                             {showRetypePassword ? (
                               <EyeOff className="w-4 h-4 text-gray-400" />
@@ -367,6 +437,7 @@ export default function AddStaffModal({
                           <Checkbox
                             key={type.key}
                             isSelected={organizationTypes.has(type.key)}
+                            isDisabled={isSubmitting || isSubmittingLocal}
                             onValueChange={(checked) => {
                               setOrganizationTypes((prev) => {
                                 const next = new Set(prev);
@@ -393,6 +464,7 @@ export default function AddStaffModal({
                       <Input
                         value={organizationInstitution}
                         onChange={(e) => setOrganizationInstitution(e.target.value)}
+                        isDisabled={isSubmitting || isSubmittingLocal}
                         classNames={{
                           inputWrapper: "border-gray-300 bg-white shadow-sm h-10",
                           input: "text-sm placeholder:text-gray-400",
@@ -417,7 +489,7 @@ export default function AddStaffModal({
                       setRoleError("");
                     }}
                     allowedStaffTypes={allowedStaffTypes.length > 0 ? allowedStaffTypes : undefined}
-                    requiredCapabilities={['request.create', 'event.manage', 'coverage.assign', 'staff.assign']}
+                    requiredCapabilities={undefined}
                     isRequired
                     error={roleError}
                   />
@@ -437,6 +509,7 @@ export default function AddStaffModal({
                         type="button"
                         size="sm"
                         variant="bordered"
+                        isDisabled={isSubmitting || isSubmittingLocal}
                         onPress={() => setIsCoverageModalOpen(true)}
                         className="text-xs"
                       >
@@ -486,10 +559,10 @@ export default function AddStaffModal({
                 <Button
                   className="flex-1 h-11 bg-black text-white font-medium text-sm hover:bg-gray-800"
                   radius="lg"
-                  isDisabled={isSubmitting}
+                  isDisabled={isSubmitting || isSubmittingLocal}
                   type="submit"
                 >
-                  {isSubmitting ? "Creating..." : "Create Staff"}
+                  {(isSubmitting || isSubmittingLocal) ? "Creating..." : "Create Staff"}
                 </Button>
               </ModalFooter>
             </form>
@@ -504,6 +577,7 @@ export default function AddStaffModal({
         onConfirm={handleCoverageConfirm}
         initialLocationIds={selectedLocationIds}
         initialCoverageAreaIds={selectedCoverageAreaIds}
+        hideBarangays={true}
       />
     </>
   );

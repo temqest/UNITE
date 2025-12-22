@@ -35,7 +35,8 @@ export default function RoleAssignmentSection({
       const loadAssignable = async () => {
         try {
           setLoadingAssignable(true);
-          const response = await getAssignableRoles();
+          // Pass coordinator-management context to skip capability filtering
+          const response = await getAssignableRoles('coordinator-management');
           if (response.success && response.data) {
             setAssignableRoles(response.data);
           }

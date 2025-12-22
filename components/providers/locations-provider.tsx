@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { fetchJsonWithAuth } from "@/utils/fetchWithAuth";
 
 type Province = {
   _id: string;
@@ -84,12 +85,9 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
       }
 
       setLoading(true);
-      const base = process.env.NEXT_PUBLIC_API_URL || "";
 
       // Fetch all provinces
-      const provincesRes = await fetch((base ? `${base}` : "") + "/api/locations/provinces");
-      if (!provincesRes.ok) throw new Error("Failed to fetch provinces");
-      const provincesData = await provincesRes.json();
+      const provincesData = await fetchJsonWithAuth("/api/locations/provinces");
       const provinces = Array.isArray(provincesData) ? provincesData : provincesData.data || provincesData.provinces || [];
       const provincesMap: Record<string, Province> = {};
       provinces.forEach((p: any) => {
@@ -98,9 +96,7 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
       });
 
       // Fetch all districts (assume API supports fetching all, e.g., with high limit)
-      const districtsRes = await fetch((base ? `${base}` : "") + "/api/districts?limit=10000");
-      if (!districtsRes.ok) throw new Error("Failed to fetch districts");
-      const districtsData = await districtsRes.json();
+      const districtsData = await fetchJsonWithAuth("/api/districts?limit=10000");
       const districts = Array.isArray(districtsData) ? districtsData : districtsData.data || districtsData.districts || [];
       const districtsMap: Record<string, District> = {};
       districts.forEach((d: any) => {
@@ -109,9 +105,7 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
       });
 
       // Fetch all municipalities
-      const municipalitiesRes = await fetch((base ? `${base}` : "") + "/api/locations/municipalities?limit=10000");
-      if (!municipalitiesRes.ok) throw new Error("Failed to fetch municipalities");
-      const municipalitiesData = await municipalitiesRes.json();
+      const municipalitiesData = await fetchJsonWithAuth("/api/locations/municipalities?limit=10000");
       const municipalities = Array.isArray(municipalitiesData) ? municipalitiesData : municipalitiesData.data || municipalitiesData.municipalities || [];
       const municipalitiesMap: Record<string, Municipality> = {};
       municipalities.forEach((m: any) => {
