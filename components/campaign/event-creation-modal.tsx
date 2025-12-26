@@ -18,7 +18,6 @@ import { Person, Droplet, Megaphone } from "@gravity-ui/icons";
 // debug logger removed from demo
 import { useEventUserData } from "@/hooks/useEventUserData";
 import AppointmentDatePicker from "@/components/tools/appointment-date-picker";
-import { getUserAuthority } from "@/utils/getUserAuthority";
 
 interface CreateTrainingEventModalProps {
   isOpen: boolean;
@@ -63,8 +62,6 @@ export const CreateTrainingEventModal: React.FC<
   const [email, setEmail] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [dateError, setDateError] = useState("");
-  const [userAuthority, setUserAuthority] = useState<number | null>(null);
-  const [isStakeholder, setIsStakeholder] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -84,64 +81,6 @@ export const CreateTrainingEventModal: React.FC<
   } = useEventUserData(isOpen, API_URL);
 
   // All coordinator and stakeholder fetching logic is now handled by useEventUserData hook
-
-  // Fetch user data to auto-fill email and phone, and determine if user is stakeholder
-  useEffect(() => {
-    if (isOpen) {
-      const fetchUserData = async () => {
-        try {
-          const rawUser = typeof window !== "undefined" ? localStorage.getItem("unite_user") : null;
-          const user = rawUser ? JSON.parse(rawUser) : null;
-          const userId = user?.id || user?._id || null;
-          
-          if (!userId) return;
-
-          // Get user authority to determine if stakeholder
-          const authority = await getUserAuthority(userId);
-          setUserAuthority(authority);
-          setIsStakeholder(authority !== null && authority < 60);
-
-          // Fetch full user data for email and phone
-          const token = typeof window !== "undefined"
-            ? localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token")
-            : null;
-          
-          if (!token) return;
-
-          const headers: HeadersInit = {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          };
-
-          const userRes = await fetch(`${API_URL}/api/users/${userId}`, {
-            headers,
-            credentials: "include",
-          });
-
-          if (userRes.ok) {
-            const userData = await userRes.json();
-            const userObj = userData.data || userData;
-            
-            // Auto-fill email and phone if not already set
-            if (!email && userObj.email) {
-              setEmail(userObj.email);
-            }
-            if (!contactNumber && userObj.phoneNumber) {
-              setContactNumber(userObj.phoneNumber);
-            } else if (!contactNumber && userObj.phone) {
-              setContactNumber(userObj.phone);
-            } else if (!contactNumber && userObj.contactNumber) {
-              setContactNumber(userObj.contactNumber);
-            }
-          }
-        } catch (err) {
-          console.error("[CreateTrainingEventModal] Failed to fetch user data:", err);
-        }
-      };
-
-      fetchUserData();
-    }
-  }, [isOpen, API_URL]);
 
   // Validate date when it changes
   useEffect(() => {
@@ -166,12 +105,7 @@ export const CreateTrainingEventModal: React.FC<
     // Validate required fields
     if (!eventTitle.trim()) {
       setTitleTouched(true);
-      return;
-    }
 
-    // Validate coordinator is set
-    if (!coordinator || coordinator.trim() === "") {
-      console.error("[handleCreate] Coordinator is required but not set");
       return;
     }
 
@@ -334,11 +268,19 @@ export const CreateTrainingEventModal: React.FC<
             <div className="space-y-1">
               <label className="text-xs font-medium">Stakeholder</label>
               {(() => {
-                // Use authority-based check (not legacy fields)
-                // Stakeholder = authority < 60
+                const rawUser =
+                  typeof window !== "undefined"
+                    ? localStorage.getItem("unite_user")
+                    : null;
+                const user = rawUser ? JSON.parse(rawUser) : null;
+                const isStakeholder = !!(
+                  user?.Stakeholder_ID ||
+                  (user?.id && user.id.toLowerCase().startsWith("stkh_"))
+                );
+
                 if (isStakeholder) {
-                  const selectedStakeholder = stakeholderOptions.find((s) => s.key === stakeholder) || stakeholderOptions[0];
-                  const displayName = selectedStakeholder?.label || "Stakeholder";
+                  const fullName =
+                    `${user?.firstName || user?.First_Name || ""} ${user?.lastName || user?.Last_Name || ""}`.trim();
 
                   return (
                     <Input
@@ -349,7 +291,7 @@ export const CreateTrainingEventModal: React.FC<
                       radius="md"
                       size="sm"
                       type="text"
-                      value={displayName}
+                      value={fullName || "Stakeholder"}
                       variant="bordered"
                     />
                   );
@@ -632,9 +574,9 @@ export const CreateTrainingEventModal: React.FC<
           </Button>
           <Button
             aria-busy={!!isSubmitting}
-            className={`bg-black text-white font-medium ${!eventTitle.trim() || !coordinator || dateError || isSubmitting ? "opacity-50 cursor-not-allowed" : ""}`}
+            className={`bg-black text-white font-medium ${!eventTitle.trim() || dateError || isSubmitting ? "opacity-50 cursor-not-allowed" : ""}`}
             color="default"
-            disabled={!eventTitle.trim() || !coordinator || !!dateError || !!isSubmitting}
+            disabled={!eventTitle.trim() || !!dateError || !!isSubmitting}
             onPress={handleCreate}
           >
             {isSubmitting ? "Creating..." : "Create Event"}

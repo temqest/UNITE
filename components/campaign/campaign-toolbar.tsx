@@ -14,6 +14,7 @@ import {
 import { Popover, PopoverTrigger, PopoverContent } from "@heroui/popover";
 import { Select, SelectItem } from "@heroui/select";
 import { Avatar } from "@heroui/avatar";
+import { Tooltip } from "@heroui/tooltip";
 import { ArrowDownToSquare, Funnel, Ticket, ChevronDown, Wrench } from "@gravity-ui/icons";
 import {
   Modal,
@@ -27,6 +28,7 @@ import { DateValue } from "@internationalized/date";
 import { useLocations } from "../providers/locations-provider";
 import { getUserInfo } from "../../utils/getUserInfo";
 import { decodeJwt } from "../../utils/decodeJwt";
+import { hasCapability } from "../../utils/permissionUtils";
 
 import {
   CreateTrainingEventModal,
@@ -74,8 +76,247 @@ export default function CampaignToolbar({
   const [selectedEventType, setSelectedEventType] = useState(
     new Set(["blood-drive"]),
   );
+  const [canCreateEvent, setCanCreateEvent] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+  // Check if user has permission to create events/requests - PERMISSION-BASED ONLY
+  useEffect(() => {
+    console.log("[Campaign Toolbar] Permission check useEffect running");
+    
+    const checkCreatePermission = async () => {
+      try {
+        console.log("[Campaign Toolbar] Starting permission check...");
+        const rawUser = localStorage.getItem("unite_user");
+        console.log("[Campaign Toolbar] Raw user from localStorage:", rawUser ? "exists" : "not found");
+        const user = rawUser ? JSON.parse(rawUser) : null;
+        console.log("[Campaign Toolbar] Full user object:", user);
+        console.log("[Campaign Toolbar] User keys:", user ? Object.keys(user) : []);
+        console.log("[Campaign Toolbar] Parsed user summary:", user ? { 
+          id: user._id || user.id || user.ID || user.userId,
+          hasPermissions: !!user.permissions, 
+          hasRoles: !!user.roles,
+          permissions: user.permissions,
+          roles: user.roles
+        } : "null");
+        const token =
+          localStorage.getItem("unite_token") ||
+          sessionStorage.getItem("unite_token");
+        console.log("[Campaign Toolbar] Token:", token ? "exists" : "not found");
+        console.log("[Campaign Toolbar] API_URL:", API_URL);
+        
+        let hasPermission = false;
+        
+        // Helper function to check if a permission string contains the capability
+        const checkPermissionString = (permString: string, capability: string): boolean => {
+          if (!permString || typeof permString !== 'string') return false;
+          // Handle comma-separated permissions like "event.create,read,update"
+          const perms = permString.split(',').map(p => p.trim());
+          // Check for exact match, wildcard all (*.*), or resource wildcard (event.*, request.*)
+          return perms.includes(capability) || 
+                 perms.includes('*.*') || 
+                 perms.some(p => {
+                   const [res] = capability.split('.');
+                   return p === `${res}.*` || p === '*.*';
+                 });
+        };
+        
+        // Helper to check permissions array (handles both formats)
+        const checkPermissionsArray = (permissions: any[]): boolean => {
+          if (!Array.isArray(permissions) || permissions.length === 0) return false;
+          
+          return permissions.some((perm: any) => {
+            if (typeof perm === 'string') {
+              // Handle comma-separated string format: 'event.create,read,update'
+              if (perm.includes(',')) {
+                return checkPermissionString(perm, 'event.create') || 
+                       checkPermissionString(perm, 'request.create');
+              }
+              // Handle single permission string
+              return perm === 'event.create' || 
+                     perm === 'request.create' ||
+                     perm === '*.*' ||
+                     perm === 'event.*' ||
+                     perm === 'request.*';
+            }
+            // Handle structured permission objects (if any)
+            if (perm && typeof perm === 'object') {
+              const resource = perm.resource;
+              const actions = Array.isArray(perm.actions) ? perm.actions : [];
+              if (resource === '*' && (actions.includes('*') || actions.includes('create'))) return true;
+              if ((resource === 'event' || resource === 'request') && actions.includes('create')) return true;
+            }
+            return false;
+          });
+        };
+        
+        if (!token || !API_URL) {
+          console.log("[Campaign Toolbar] Missing token or API_URL");
+          setCanCreateEvent(false);
+          return;
+        }
+        
+        // Extract user ID from multiple sources
+        let userId = user?._id || user?.id || user?.ID || user?.userId || user?.user_id;
+        
+        // If user ID not found in user object, try to get it from JWT token
+        if (!userId && token) {
+          try {
+            const payload = decodeJwt(token);
+            console.log("[Campaign Toolbar] JWT payload:", payload);
+            userId = payload?.id || payload?.userId || payload?.user_id || payload?._id || payload?.sub;
+            console.log("[Campaign Toolbar] User ID from JWT:", userId);
+          } catch (e) {
+            console.warn("[Campaign Toolbar] Failed to decode JWT:", e);
+          }
+        }
+        
+        console.log("[Campaign Toolbar] Final User ID:", userId);
+        
+        // PRIORITY 1: Check localStorage permissions FIRST (faster, no API call needed)
+        if (user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
+          console.log("[Campaign Toolbar] Found permissions in user object:", user.permissions);
+          hasPermission = checkPermissionsArray(user.permissions);
+          console.log("[Campaign Toolbar] Permission check result (localStorage):", hasPermission);
+          if (hasPermission) {
+            console.log("[Campaign Toolbar] Setting canCreateEvent to TRUE (from localStorage)");
+            setCanCreateEvent(true);
+            return;
+          }
+        }
+        
+        // PRIORITY 2: ALWAYS try API for most accurate permission data (since localStorage often doesn't have permissions)
+        // First try /api/auth/me (doesn't require user ID, returns current user with permissions)
+        if (token && API_URL) {
+          try {
+            const headers: any = { "Content-Type": "application/json" };
+            headers["Authorization"] = `Bearer ${token}`;
+            
+            // Try /api/auth/me first (doesn't require user ID)
+            console.log("[Campaign Toolbar] Fetching current user from /api/auth/me");
+            const meRes = await fetch(`${API_URL}/api/auth/me`, {
+              headers,
+              credentials: "include",
+            });
+            
+            if (meRes.ok) {
+              const meBody = await meRes.json();
+              console.log("[Campaign Toolbar] /api/auth/me response:", meBody);
+              
+              const meUser = meBody.user || meBody.data || meBody;
+              const permissions = meUser?.permissions || [];
+              
+              console.log("[Campaign Toolbar] Extracted permissions from /api/auth/me:", permissions);
+              
+              hasPermission = checkPermissionsArray(permissions);
+              
+              console.log("[Campaign Toolbar] Permission check result (/api/auth/me):", hasPermission);
+              
+              if (hasPermission) {
+                console.log("[Campaign Toolbar] Setting canCreateEvent to TRUE (from /api/auth/me)");
+                setCanCreateEvent(true);
+                return; // Early return if permission found via /api/auth/me
+              }
+            } else {
+              console.warn("[Campaign Toolbar] /api/auth/me failed:", meRes.status, meRes.statusText);
+            }
+          } catch (meErr) {
+            console.warn("[Campaign Toolbar] Failed to fetch from /api/auth/me:", meErr);
+          }
+        }
+        
+        // Fallback: Try /api/users/:userId/capabilities if we have userId
+        if (userId && token && API_URL) {
+            try {
+              const headers: any = { "Content-Type": "application/json" };
+              headers["Authorization"] = `Bearer ${token}`;
+              
+              console.log("[Campaign Toolbar] Fetching capabilities from API:", `${API_URL}/api/users/${userId}/capabilities`);
+              const res = await fetch(`${API_URL}/api/users/${userId}/capabilities`, {
+                headers,
+                credentials: "include",
+              });
+              
+              console.log("[Campaign Toolbar] API response status:", res.status, res.statusText);
+              
+              if (res.ok) {
+                const body = await res.json();
+                console.log("[Campaign Toolbar] API response body:", body);
+                const capabilities = body.data?.capabilities || body.capabilities || body.data || [];
+                
+                console.log("[Campaign Toolbar] Extracted capabilities:", capabilities);
+                
+                // Check capabilities array
+                hasPermission = checkPermissionsArray(capabilities);
+                
+                console.log("[Campaign Toolbar] Permission check result (API):", hasPermission);
+                
+                if (hasPermission) {
+                  console.log("[Campaign Toolbar] Setting canCreateEvent to TRUE (from API)");
+                  setCanCreateEvent(true);
+                  return; // Early return if permission found via API
+                }
+              } else {
+                const errorBody = await res.json().catch(() => ({}));
+                console.error("[Campaign Toolbar] API error response:", res.status, errorBody);
+              }
+            } catch (apiErr) {
+              console.error("[Campaign Toolbar] Failed to fetch capabilities from API:", apiErr);
+              // Continue to check user object as fallback
+            }
+          } else if (!userId && token && API_URL) {
+            console.warn("[Campaign Toolbar] Cannot call /api/users/:userId/capabilities - missing userId", {
+              userId: !!userId,
+              token: !!token,
+              API_URL: !!API_URL
+            });
+          }
+          
+        // PRIORITY 3: Check roles for permissions
+        if (user?.roles && Array.isArray(user.roles)) {
+            // Try hasCapability utility for structured roles
+            hasPermission = hasCapability(user, 'event.create') || hasCapability(user, 'request.create');
+            if (hasPermission) {
+              setCanCreateEvent(true);
+              return;
+            }
+            
+            // Also check if roles have permissions arrays
+            for (const role of user.roles) {
+              if (role && role.permissions && Array.isArray(role.permissions)) {
+                hasPermission = checkPermissionsArray(role.permissions);
+                if (hasPermission) {
+                  setCanCreateEvent(true);
+                  return;
+                }
+              }
+            }
+          }
+          
+        // PRIORITY 4: Check nested data structures
+        if (user?.data && user.data.permissions) {
+          hasPermission = checkPermissionsArray(user.data.permissions);
+          if (hasPermission) {
+            setCanCreateEvent(true);
+            return;
+          }
+        }
+        
+        // If we get here, no permission was found - set to false
+        console.log("[Campaign Toolbar] No permission found, setting canCreateEvent to false");
+        setCanCreateEvent(false);
+      } catch (err) {
+        console.error("[Campaign Toolbar] Error checking create permission:", err);
+        console.error("[Campaign Toolbar] Error stack:", err instanceof Error ? err.stack : "No stack trace");
+        setCanCreateEvent(false);
+      }
+    };
+    
+    checkCreatePermission().catch((err) => {
+      console.error("[Campaign Toolbar] Unhandled error in checkCreatePermission:", err);
+      setCanCreateEvent(false);
+    });
+  }, [API_URL]);
 
   // Quick Filter States
   const [qEventType, setQEventType] = useState<string>("");
@@ -262,15 +503,12 @@ export default function CampaignToolbar({
         const user = rawUser ? JSON.parse(rawUser) : null;
         const info = getUserInfo();
 
-        const isAdmin = !!(
-          (info && info.isAdmin) ||
-          (user &&
-            ((user.staff_type &&
-              String(user.staff_type).toLowerCase().includes("admin")) ||
-              (user.role && String(user.role).toLowerCase().includes("admin"))))
-        );
-
-        if (user && isAdmin) {
+        // Check if user has permission to view coordinators (typically admins or users with request.review permission)
+        // Use permission-based check instead of hardcoded role checks
+        const hasReviewPermission = user && (hasCapability(user, 'request.review') || hasCapability(user, 'request.*') || hasCapability(user, '*'));
+        const isAdmin = !!(info && info.isAdmin) || (user && (user.authority >= 80 || user.isSystemAdmin));
+        
+        if (user && (isAdmin || hasReviewPermission)) {
           const res = await fetch(`${API_URL}/api/coordinators`, {
             headers,
             credentials: "include",
@@ -302,28 +540,19 @@ export default function CampaignToolbar({
           }
         }
 
-        // Non-admin flows
-        if (user) {
-          const candidateIds: Array<string | number | undefined> = [];
-
-          if (
-            (user.staff_type &&
-              String(user.staff_type).toLowerCase().includes("coordinator")) ||
-            (info &&
-              String(info.role || "")
-                .toLowerCase()
-                .includes("coordinator"))
-          )
-            candidateIds.push(user.id || info?.raw?.id);
-          candidateIds.push(
+        // For non-admin users, try to get their coordinator ID from user object
+        // This is for users who are coordinators themselves or have coordinator assignments
+        if (user && !isAdmin && !hasReviewPermission) {
+          // Try to get coordinator ID from various possible fields
+          const candidateIds: Array<string | number | undefined> = [
+            user.id || user._id,
             user.Coordinator_ID,
             user.CoordinatorId,
             user.CoordinatorID,
             user.role_data?.coordinator_id,
-            user.MadeByCoordinatorID,
             info?.raw?.Coordinator_ID,
             info?.raw?.CoordinatorId,
-          );
+          ];
 
           let coordId = candidateIds.find(Boolean) as string | undefined;
 
@@ -833,51 +1062,64 @@ export default function CampaignToolbar({
             {/* Removed separate mobile funnel icon to free space on small screens */}
 
             {/* Create Event Button Group with Dropdown Menu*/}
-            <ButtonGroup radius="md" size="sm" variant="solid" className="flex-shrink-0 overflow-visible mr-3 relative z-50">
-              {/* Full button for desktop/tablet */}
-              <Button
-                color="primary"
-                className="hidden sm:inline-flex items-center gap-2 rounded-l-md"
-                radius="md"
-                size="sm"
-                startContent={<Ticket className="w-4 h-4" />}
-                onPress={handleCreateEventClick}
-                style={{ borderTopLeftRadius: "0.75rem", borderBottomLeftRadius: "0.75rem", borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
-              >
-                {currentEventLabel}
-              </Button>
-
-              {/* Compact icon-only button for small screens */}
-              <Button
-                color="primary"
-                isIconOnly
-                radius="md"
-                size="sm"
-                className="inline-flex sm:hidden h-8 w-8 items-center justify-center rounded-l-md"
-                onPress={handleCreateEventClick}
-                aria-label={`Create ${currentEventLabel}`}
-                style={{ borderTopLeftRadius: "0.75rem", borderBottomLeftRadius: "0.75rem", borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
-              >
-                <svg
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
+            <Tooltip
+              content={canCreateEvent ? undefined : "You don't have permission to create events or requests"}
+              isDisabled={canCreateEvent}
+            >
+              <ButtonGroup radius="md" size="sm" variant="solid" className="flex-shrink-0 overflow-visible mr-3 relative z-50">
+                {/* Full button for desktop/tablet */}
+                <Button
+                  color="primary"
+                  className="hidden sm:inline-flex items-center gap-2 rounded-l-md"
+                  radius="md"
+                  size="sm"
+                  startContent={<Ticket className="w-4 h-4" />}
+                  onPress={handleCreateEventClick}
+                  isDisabled={!canCreateEvent}
+                  style={{ borderTopLeftRadius: "0.75rem", borderBottomLeftRadius: "0.75rem", borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
                 >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </Button>
-              <Dropdown placement="bottom-end">
-                <DropdownTrigger>
-                  <Button isIconOnly color="primary" className="h-8 w-8 rounded-r-md" size="sm" style={{ borderTopRightRadius: "0.75rem", borderBottomRightRadius: "0.75rem", borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}>
-                    <ChevronDown className="w-4 h-4" />
-                  </Button>
-                </DropdownTrigger>
+                  {currentEventLabel}
+                </Button>
+
+                {/* Compact icon-only button for small screens */}
+                <Button
+                  color="primary"
+                  isIconOnly
+                  radius="md"
+                  size="sm"
+                  className="inline-flex sm:hidden h-8 w-8 items-center justify-center rounded-l-md"
+                  onPress={handleCreateEventClick}
+                  isDisabled={!canCreateEvent}
+                  aria-label={`Create ${currentEventLabel}`}
+                  style={{ borderTopLeftRadius: "0.75rem", borderBottomLeftRadius: "0.75rem", borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+                >
+                  <svg
+                    className="w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </Button>
+                <Dropdown placement="bottom-end" isDisabled={!canCreateEvent}>
+                  <DropdownTrigger>
+                    <Button 
+                      isIconOnly 
+                      color="primary" 
+                      className="h-8 w-8 rounded-r-md" 
+                      size="sm" 
+                      isDisabled={!canCreateEvent}
+                      style={{ borderTopRightRadius: "0.75rem", borderBottomRightRadius: "0.75rem", borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </Button>
+                  </DropdownTrigger>
                 <DropdownMenu
                   disallowEmptySelection
                   aria-label="Event type options"
@@ -917,6 +1159,7 @@ export default function CampaignToolbar({
             </DropdownMenu>
           </Dropdown>
         </ButtonGroup>
+            </Tooltip>
           </div>
         </div>
 

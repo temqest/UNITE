@@ -149,11 +149,13 @@ export default function CampaignPage() {
 
   const mapTabToStatusParam = (tab: string) => {
     if (!tab || tab === "all") return undefined;
-    if (tab === "approved") return "APPROVED";
-    if (tab === "pending") return "PENDING_REVIEW";
-    if (tab === "rejected") return "REJECTED";
+    // Normalize to lowercase for case-insensitive matching
+    const normalizedTab = tab.toLowerCase().trim();
+    if (normalizedTab === "approved") return "approved";
+    if (normalizedTab === "pending") return "pending-review";
+    if (normalizedTab === "rejected") return "rejected";
 
-    return tab.toUpperCase();
+    return normalizedTab;
   };
 
   // Extracted fetchRequests so we can reuse after creating events. Relies on backend filtering instead of client-side filtering.
@@ -213,7 +215,7 @@ export default function CampaignPage() {
 
       if (!res.ok) throw new Error(body.message || "Failed to fetch requests");
 
-      // New response format: { success, data: { requests, count } }
+      // New response format: { success, data: { requests, count, statusCounts } }
       const responseData = body.data || {};
       const list = Array.isArray(responseData.requests) ? responseData.requests : 
                    Array.isArray(body.data) ? body.data : 
@@ -224,28 +226,38 @@ export default function CampaignPage() {
       setTotalRequestsCount(totalCount);
       setIsServerPaged(totalCount > list.length);
       
-      // Calculate status counts from the list (backend should provide this in future)
-      const statusCounts = {
-        approved: list.filter((r: any) => {
-          const status = r.status || r.Status || "";
-          return status.toLowerCase().includes("approv") || status.toLowerCase().includes("complete");
-        }).length,
-        pending: list.filter((r: any) => {
-          const status = r.status || r.Status || "";
-          return status.toLowerCase().includes("pending") || status.toLowerCase().includes("review");
-        }).length,
-        rejected: list.filter((r: any) => {
-          const status = r.status || r.Status || "";
-          return status.toLowerCase().includes("reject");
-        }).length,
-      };
+      // Use server-side status counts if available, otherwise calculate from current page
+      if (responseData.statusCounts) {
+        setRequestCounts({
+          all: responseData.statusCounts.all ?? totalCount,
+          approved: responseData.statusCounts.approved ?? 0,
+          pending: responseData.statusCounts.pending ?? 0,
+          rejected: responseData.statusCounts.rejected ?? 0,
+        });
+      } else {
+        // Fallback: calculate from current page (less accurate but better than nothing)
+        const statusCounts = {
+          approved: list.filter((r: any) => {
+            const status = r.status || r.Status || "";
+            return status.toLowerCase().includes("approv") || status.toLowerCase().includes("complete");
+          }).length,
+          pending: list.filter((r: any) => {
+            const status = r.status || r.Status || "";
+            return status.toLowerCase().includes("pending") || status.toLowerCase().includes("review");
+          }).length,
+          rejected: list.filter((r: any) => {
+            const status = r.status || r.Status || "";
+            return status.toLowerCase().includes("reject");
+          }).length,
+        };
 
-      setRequestCounts({
-        all: totalCount,
-        approved: statusCounts.approved,
-        pending: statusCounts.pending,
-        rejected: statusCounts.rejected,
-      });
+        setRequestCounts({
+          all: totalCount,
+          approved: statusCounts.approved,
+          pending: statusCounts.pending,
+          rejected: statusCounts.rejected,
+        });
+      }
     } catch (err: any) {
       console.error("Fetch requests error", err);
       setRequestsError(err.message || "Failed to fetch requests");
