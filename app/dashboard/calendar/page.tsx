@@ -45,6 +45,7 @@ import { transformEventData } from "@/components/calendar/calendar-event-utils";
 import Topbar from "@/components/layout/topbar";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getUserInfo } from "@/utils/getUserInfo";
+import { getEventActionPermissions, isAdminByAuthority, clearPermissionCache } from "@/utils/eventActionPermissions";
 import MobileNav from "@/components/tools/mobile-nav";
 import { useLocations } from "@/components/providers/locations-provider";
 import {
@@ -75,6 +76,14 @@ export default function CalendarPage(props: any) {
   >({});
   const [detailedEvents, setDetailedEvents] = useState<Record<string, any>>({});
   const [eventsLoading, setEventsLoading] = useState(false);
+  // Cache for event action permissions (keyed by eventId)
+  const [eventPermissionsCache, setEventPermissionsCache] = useState<
+    Record<string, Awaited<ReturnType<typeof getEventActionPermissions>>>
+  >({});
+  // Track loading state for each event's permissions
+  const [eventPermissionsLoading, setEventPermissionsLoading] = useState<
+    Record<string, boolean>
+  >({});
   const [currentUserName, setCurrentUserName] = useState<string>(
     "Bicol Medical Center",
   );
@@ -398,6 +407,74 @@ export default function CalendarPage(props: any) {
   useEffect(() => {
     refreshCalendarData();
   }, [currentDate]);
+
+  // Pre-fetch permissions for all visible events
+  useEffect(() => {
+    const fetchPermissionsForEvents = async () => {
+      // Get all unique event IDs from week and month views
+      const allEventIds = new Set<string>();
+      const eventMap = new Map<string, any>();
+      
+      Object.values(weekEventsByDate).forEach((events) => {
+        events.forEach((event: any) => {
+          const evId = event.Event_ID || event.EventId || event.id;
+          if (evId && !eventPermissionsCache[evId]) {
+            allEventIds.add(evId);
+            eventMap.set(evId, event);
+          }
+        });
+      });
+      
+      Object.values(monthEventsByDate).forEach((events) => {
+        events.forEach((event: any) => {
+          const evId = event.Event_ID || event.EventId || event.id;
+          if (evId && !eventPermissionsCache[evId]) {
+            allEventIds.add(evId);
+            if (!eventMap.has(evId)) {
+              eventMap.set(evId, event);
+            }
+          }
+        });
+      });
+
+      // Fetch permissions for all events in parallel (with limit to avoid too many requests)
+      const eventIdsArray = Array.from(allEventIds).slice(0, 20); // Limit to 20 at a time
+      
+      // Get user ID
+      const rawUserStr =
+        typeof window !== "undefined" ? localStorage.getItem("unite_user") : null;
+      let parsedUser: any = null;
+      try {
+        parsedUser = rawUserStr ? JSON.parse(rawUserStr) : null;
+      } catch (e) {
+        parsedUser = null;
+      }
+      
+      const userId = parsedUser?._id || parsedUser?.id || parsedUser?.User_ID || null;
+      
+      await Promise.all(
+        eventIdsArray.map(async (evId) => {
+          const eventObj = eventMap.get(evId);
+          if (eventObj) {
+            try {
+              const permissions = await getEventActionPermissions(eventObj, userId, false);
+              setEventPermissionsCache((prev) => ({
+                ...prev,
+                [evId]: permissions,
+              }));
+            } catch (error) {
+              console.error(`[Calendar] Error fetching permissions for event ${evId}:`, error);
+            }
+          }
+        })
+      );
+    };
+
+    if (Object.keys(weekEventsByDate).length > 0 || Object.keys(monthEventsByDate).length > 0) {
+      fetchPermissionsForEvents();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekEventsByDate, monthEventsByDate]);
 
   const navigateWeek = async (direction: "prev" | "next") => {
     setIsDateTransitioning(true);
@@ -1205,6 +1282,10 @@ export default function CalendarPage(props: any) {
 
         // refresh requests list to show the newly created event
         await refreshCalendarData();
+        // Clear permission cache to refresh permissions
+        setEventPermissionsCache({});
+        setEventPermissionsLoading({});
+        clearPermissionCache();
 
         return resp;
       } else {
@@ -1230,6 +1311,10 @@ export default function CalendarPage(props: any) {
           throw new Error(resp.message || "Failed to create request");
 
         await refreshCalendarData();
+        // Clear permission cache to refresh permissions
+        setEventPermissionsCache({});
+        setEventPermissionsLoading({});
+        clearPermissionCache();
 
         return resp;
       }
@@ -1331,10 +1416,114 @@ export default function CalendarPage(props: any) {
     }),
   };
 
-  // Build dropdown menus matching campaign design
+  // Helper to fetch and cache permissions for an event
+  const fetchEventPermissions = async (event: any) => {
+    const evRaw = event.raw || event;
+    const evId = evRaw.Event_ID || evRaw.EventId || evRaw.id;
+    
+    console.log("[Calendar] fetchEventPermissions called:", {
+      eventId: evId,
+      hasRaw: !!event.raw,
+      eventKeys: evRaw ? Object.keys(evRaw).slice(0, 20) : [],
+      alreadyCached: !!eventPermissionsCache[evId],
+    });
+    
+    if (!evId) {
+      console.warn("[Calendar] No event ID found:", { event, evRaw });
+      return;
+    }
+    
+    // Check if already cached
+    if (eventPermissionsCache[evId]) {
+      console.log("[Calendar] Permissions already cached for event:", evId);
+      return;
+    }
+    
+    // Check if already loading
+    if (eventPermissionsLoading[evId]) {
+      console.log("[Calendar] Permissions already loading for event:", evId);
+      return;
+    }
+    
+    // Set loading state
+    setEventPermissionsLoading((prev) => ({
+      ...prev,
+      [evId]: true,
+    }));
+    
+    try {
+      // Get user ID
+      const rawUserStr =
+        typeof window !== "undefined" ? localStorage.getItem("unite_user") : null;
+      let parsedUser: any = null;
+      try {
+        parsedUser = rawUserStr ? JSON.parse(rawUserStr) : null;
+      } catch (e) {
+        parsedUser = null;
+      }
+      
+      const userId = parsedUser?._id || parsedUser?.id || parsedUser?.User_ID || parsedUser?.userId || parsedUser?.ID || null;
+      
+      console.log("[Calendar] User info:", {
+        hasRawUser: !!rawUserStr,
+        userId,
+        userKeys: parsedUser ? Object.keys(parsedUser).slice(0, 20) : [],
+        allIdFields: parsedUser ? {
+          _id: parsedUser._id,
+          id: parsedUser.id,
+          User_ID: parsedUser.User_ID,
+          userId: parsedUser.userId,
+          ID: parsedUser.ID,
+          Admin_ID: parsedUser.Admin_ID,
+          Coordinator_ID: parsedUser.Coordinator_ID,
+          Stakeholder_ID: parsedUser.Stakeholder_ID,
+        } : {},
+      });
+      
+      // Fetch permissions
+      console.log("[Calendar] Fetching permissions for event:", evId);
+      const permissions = await getEventActionPermissions(evRaw, userId, false);
+      
+      console.log("[Calendar] Permissions fetched:", {
+        eventId: evId,
+        permissions,
+      });
+      
+      // Update cache
+      setEventPermissionsCache((prev) => ({
+        ...prev,
+        [evId]: permissions,
+      }));
+    } catch (error) {
+      console.error("[Calendar] Error fetching event permissions:", error);
+      // On error, cache default permissions (view only)
+      setEventPermissionsCache((prev) => ({
+        ...prev,
+        [evId]: {
+          canView: true,
+          canEdit: false,
+          canManageStaff: false,
+          canReschedule: false,
+          canCancel: false,
+          canDelete: false,
+        },
+      }));
+    } finally {
+      // Clear loading state
+      setEventPermissionsLoading((prev) => {
+        const updated = { ...prev };
+        delete updated[evId];
+        return updated;
+      });
+    }
+  };
+
+  // Build dropdown menus using permission-based evaluation
   const getMenuByStatus = (event: any) => {
-    // Calendar events are from public API; assume Approved for action availability
-    const status = "Approved";
+    // Calendar events are from public API; determine status from event
+    const evRaw = event.raw || event;
+    const status = evRaw.Status || evRaw.status || "Approved";
+    const evId = evRaw.Event_ID || evRaw.EventId || evRaw.id;
 
     // Unauthenticated users: view-only
     const token =
@@ -1361,196 +1550,168 @@ export default function CalendarPage(props: any) {
       );
     }
 
-    // Parse current user
-    const rawUserStr =
-      typeof window !== "undefined" ? localStorage.getItem("unite_user") : null;
-    let parsedUser: any = null;
-    try {
-      parsedUser = rawUserStr ? JSON.parse(rawUserStr) : null;
-    } catch (e) {
-      parsedUser = null;
+    // Fetch permissions asynchronously (will cache for next render)
+    if (evId && !eventPermissionsCache[evId] && !eventPermissionsLoading[evId]) {
+      fetchEventPermissions(event);
     }
 
-    const info = getUserInfo();
-    const userIsAdmin = !!info.isAdmin;
-    const userCoordinatorId =
-      parsedUser?.Coordinator_ID ||
-      parsedUser?.CoordinatorId ||
-      parsedUser?.CoordinatorId ||
-      parsedUser?.Coordinator ||
-      parsedUser?.Coordinator_ID;
-    const userStakeholderId =
-      parsedUser?.Stakeholder_ID ||
-      parsedUser?.StakeholderId ||
-      parsedUser?.StakeholderId ||
-      parsedUser?.Stakeholder ||
-      parsedUser?.Stakeholder_ID;
+    // Check if permissions are loading
+    const isLoading = evId ? eventPermissionsLoading[evId] || false : false;
 
-    // Helpers to extract district/province objects from various shapes
-    const extractDistrictProvince = (obj: any) => {
-      if (!obj)
-        return { district_number: null, district_name: null, province: null };
-      return {
-        district_number:
-          obj.District_Number ||
-          obj.district_number ||
-          obj.District_ID ||
-          obj.DistrictId ||
-          null,
-        district_name:
-          obj.District_Name || obj.district_name || obj.district || null,
-        province: obj.Province || obj.province || obj.Province_Name || null,
-      };
-    };
+    // Get cached permissions (or default to view-only if not yet loaded)
+    const permissions = evId && eventPermissionsCache[evId]
+      ? eventPermissionsCache[evId]
+      : {
+          canView: true,
+          canEdit: false,
+          canManageStaff: false,
+          canReschedule: false,
+          canCancel: false,
+          canDelete: false,
+        };
+    
+    console.log("[Calendar] getMenuByStatus - permissions for event:", {
+      eventId: evId,
+      status,
+      isLoading,
+      hasCachedPermissions: !!(evId && eventPermissionsCache[evId]),
+      permissions,
+      cacheKeys: Object.keys(eventPermissionsCache),
+    });
 
-    // Determine event ownership and related metadata (use detailedEvents when available)
-    const evRaw = event.raw || {};
-    const evId = evRaw.Event_ID || evRaw.EventId || evRaw.id;
-    const detailed = evId ? detailedEvents[evId] : null;
+    // Determine event status for action availability
+    const normalizedStatus = String(status || "Approved").toLowerCase();
+    const isApproved = normalizedStatus.includes("approve");
+    const isCancelled = normalizedStatus.includes("cancel");
+    const isCompleted = normalizedStatus.includes("complete");
 
-    const eventCoordinatorId =
-      evRaw.MadeByCoordinatorID ||
-      evRaw.MadeByCoordinatorId ||
-      evRaw.coordinatorId ||
-      detailed?.coordinator?.id ||
-      detailed?.coordinator?.Coordinator_ID;
-    const eventStakeholderId =
-      evRaw.MadeByStakeholderID ||
-      evRaw.MadeByStakeholderId ||
-      evRaw.stakeholder ||
-      detailed?.stakeholder?.id ||
-      detailed?.stakeholder?.Stakeholder_ID;
-
-    const eventStakeholderMeta =
-      detailed?.stakeholder ||
-      evRaw.stakeholder ||
-      evRaw.MadeByStakeholder ||
-      evRaw.MadeByStakeholderMeta ||
-      null;
-    const stakeholderDP = extractDistrictProvince(eventStakeholderMeta);
-
-    const userDP = extractDistrictProvince(parsedUser || {});
-
-    const coordinatorOwns =
-      userCoordinatorId &&
-      eventCoordinatorId &&
-      String(userCoordinatorId) === String(eventCoordinatorId);
-    const stakeholderOwns =
-      userStakeholderId &&
-      eventStakeholderId &&
-      String(userStakeholderId) === String(eventStakeholderId);
-
-    // Coordinator may act if they own the event OR the event is owned by a stakeholder in the same district/province
-    const sameDistrictForCoordinator =
-      (userDP.district_number &&
-        stakeholderDP.district_number &&
-        String(userDP.district_number) ===
-          String(stakeholderDP.district_number)) ||
-      (userDP.district_name &&
-        stakeholderDP.district_name &&
-        String(userDP.district_name).toLowerCase() ===
-          String(stakeholderDP.district_name).toLowerCase());
-    const sameProvinceForCoordinator =
-      userDP.province &&
-      stakeholderDP.province &&
-      String(userDP.province).toLowerCase() ===
-        String(stakeholderDP.province).toLowerCase();
-
-    const userIsCoordinator = !!(
-      userCoordinatorId ||
-      String(info.role || "")
-        .toLowerCase()
-        .includes("coordinator")
-    );
-
-    const coordinatorHasFull =
-      userIsCoordinator &&
-      (coordinatorOwns ||
-        (eventStakeholderId &&
-          (sameDistrictForCoordinator || sameProvinceForCoordinator)) ||
-        stakeholderOwns);
-
-    const userIsStakeholder = !!(
-      userStakeholderId ||
-      String(info.role || "")
-        .toLowerCase()
-        .includes("stakeholder")
-    );
-    const stakeholderHasFull = userIsStakeholder && stakeholderOwns;
-
-    // Build allowed action flags
-    const allowView = true;
-    const allowEdit = userIsAdmin || coordinatorHasFull || stakeholderHasFull;
-    const allowManageStaff =
-      userIsAdmin || coordinatorHasFull || stakeholderHasFull;
-    const allowResched =
-      userIsAdmin || coordinatorHasFull || stakeholderHasFull;
-    const allowCancel = userIsAdmin || coordinatorHasFull || stakeholderHasFull;
-
-    const approvedMenu = (
-      <DropdownMenu aria-label="Event actions menu" variant="faded">
-        <DropdownSection showDivider title="Actions">
-          {allowView ? (
+    // Show loading state if permissions are being fetched
+    if (isLoading) {
+      return (
+        <DropdownMenu aria-label="Event actions menu" variant="faded">
+          <DropdownSection title="Actions">
             <DropdownItem
-              key="view"
-              description="View this event"
-              startContent={<Eye />}
-              onPress={() => handleOpenViewEvent(event.raw)}
-            >
-              View Event
-            </DropdownItem>
-          ) : null}
-          {allowEdit ? (
-            <DropdownItem
-              key="edit"
-              description="Edit an event"
-              startContent={<Edit />}
-              onPress={() => handleOpenEditEvent(event.raw)}
-            >
-              Edit Event
-            </DropdownItem>
-          ) : null}
-          {allowManageStaff ? (
-            <DropdownItem
-              key="manage-staff"
-              description="Manage staff for this event"
-              startContent={<Users />}
-              onPress={() => setManageStaffOpenId(event.raw.Event_ID)}
-            >
-              Manage Staff
-            </DropdownItem>
-          ) : null}
-          {allowResched ? (
-            <DropdownItem
-              key="reschedule"
-              description="Reschedule this event"
-              startContent={<Clock className="w-3 h-3 text-gray-500" />}
-              onPress={() => setRescheduleOpenId(event.raw.Event_ID)}
-            >
-              Reschedule Event
-            </DropdownItem>
-          ) : null}
-        </DropdownSection>
-        <DropdownSection title="Danger zone">
-          {allowCancel ? (
-            <DropdownItem
-              key="cancel"
-              className="text-danger"
-              color="danger"
-              description="Cancel an event"
+              key="loading"
+              isDisabled
               startContent={
-                <Trash2 className="text-xl text-danger pointer-events-none shrink-0" />
+                <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
               }
-              onPress={() => setCancelOpenId(event.raw.Event_ID)}
             >
-              Cancel
+              Loading permissions...
             </DropdownItem>
-          ) : null}
-        </DropdownSection>
-      </DropdownMenu>
-    );
+          </DropdownSection>
+        </DropdownMenu>
+      );
+    }
 
-    const defaultMenu = (
+    // Build menu based on status and permissions
+    if (isCancelled) {
+      // Cancelled events: view + delete (if admin has permission)
+      return (
+        <DropdownMenu aria-label="Event actions menu" variant="faded">
+          <DropdownSection title="Actions">
+            {permissions.canView ? (
+              <DropdownItem
+                key="view"
+                description="View this event"
+                startContent={<Eye />}
+                onPress={() => handleOpenViewEvent(event.raw)}
+              >
+                View Event
+              </DropdownItem>
+            ) : null}
+          </DropdownSection>
+          {permissions.canDelete ? (
+            <DropdownSection title="Danger zone">
+              <DropdownItem
+                key="delete"
+                className="text-danger"
+                color="danger"
+                description="Delete this event"
+                startContent={
+                  <Trash2 className="text-xl text-danger pointer-events-none shrink-0" />
+                }
+                onPress={() => {
+                  // TODO: Implement delete handler
+                  console.warn("Delete action not yet implemented");
+                }}
+              >
+                Delete
+              </DropdownItem>
+            </DropdownSection>
+          ) : null}
+        </DropdownMenu>
+      );
+    }
+
+    if (isApproved || isCompleted) {
+      // Approved/Completed events: full action set based on permissions
+      return (
+        <DropdownMenu aria-label="Event actions menu" variant="faded">
+          <DropdownSection showDivider title="Actions">
+            {permissions.canView ? (
+              <DropdownItem
+                key="view"
+                description="View this event"
+                startContent={<Eye />}
+                onPress={() => handleOpenViewEvent(event.raw)}
+              >
+                View Event
+              </DropdownItem>
+            ) : null}
+            {permissions.canEdit ? (
+              <DropdownItem
+                key="edit"
+                description="Edit an event"
+                startContent={<Edit />}
+                onPress={() => handleOpenEditEvent(event.raw)}
+              >
+                Edit Event
+              </DropdownItem>
+            ) : null}
+            {permissions.canManageStaff ? (
+              <DropdownItem
+                key="manage-staff"
+                description="Manage staff for this event"
+                startContent={<Users />}
+                onPress={() => setManageStaffOpenId(event.raw.Event_ID)}
+              >
+                Manage Staff
+              </DropdownItem>
+            ) : null}
+            {permissions.canReschedule ? (
+              <DropdownItem
+                key="reschedule"
+                description="Reschedule this event"
+                startContent={<Clock className="w-3 h-3 text-gray-500" />}
+                onPress={() => setRescheduleOpenId(event.raw.Event_ID)}
+              >
+                Reschedule Event
+              </DropdownItem>
+            ) : null}
+          </DropdownSection>
+          {permissions.canCancel ? (
+            <DropdownSection title="Danger zone">
+              <DropdownItem
+                key="cancel"
+                className="text-danger"
+                color="danger"
+                description="Cancel an event"
+                startContent={
+                  <Trash2 className="text-xl text-danger pointer-events-none shrink-0" />
+                }
+                onPress={() => setCancelOpenId(event.raw.Event_ID)}
+              >
+                Cancel
+              </DropdownItem>
+            </DropdownSection>
+          ) : null}
+        </DropdownMenu>
+      );
+    }
+
+    // Default: view-only for other statuses
+    return (
       <DropdownMenu aria-label="Event actions menu" variant="faded">
         <DropdownSection title="Actions">
           <DropdownItem
@@ -1564,9 +1725,6 @@ export default function CalendarPage(props: any) {
         </DropdownSection>
       </DropdownMenu>
     );
-
-    if (status === "Approved") return approvedMenu;
-    return defaultMenu;
   };
 
   // View/Edit handlers: open campaign modals with fetched event details
@@ -1995,6 +2153,9 @@ export default function CalendarPage(props: any) {
         onSaved={async () => {
           // refresh calendar after saving staff
           await refreshCalendarData();
+          // Clear permission cache to refresh permissions
+          setEventPermissionsCache({});
+          clearPermissionCache();
         }}
       />
       <EventRescheduleModal
@@ -2006,6 +2167,9 @@ export default function CalendarPage(props: any) {
         onSaved={async () => {
           // refresh calendar after reschedule
           await refreshCalendarData();
+          // Clear permission cache to refresh permissions
+          setEventPermissionsCache({});
+          clearPermissionCache();
         }}
       />
       <EditEventModal
@@ -2020,6 +2184,9 @@ export default function CalendarPage(props: any) {
           setViewModalOpen(false);
           setEditModalOpen(false);
           await refreshCalendarData();
+          // Clear permission cache to refresh permissions
+          setEventPermissionsCache({});
+          clearPermissionCache();
         }}
       />
       {/* Accept confirmation modal */}
