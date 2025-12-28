@@ -14,6 +14,12 @@ export interface StaffListItem {
   organizationType?: 'LGU' | 'NGO' | 'Hospital' | 'RedCross' | 'Non-LGU' | 'Other';
   organizationName?: string;
   organizationId?: string;
+  organizations?: Array<{
+    id: string;
+    name: string;
+    type: 'LGU' | 'NGO' | 'Hospital' | 'BloodBank' | 'RedCross' | 'Non-LGU' | 'Other';
+    isPrimary: boolean;
+  }>;
   roles: Array<{
     id: string;
     code: string;
@@ -136,6 +142,8 @@ export interface UpdateStaffData {
   phoneNumber?: string;
   organizationType?: 'LGU' | 'NGO' | 'Hospital' | 'RedCross' | 'Non-LGU' | 'Other';
   organizationInstitution?: string;
+  organizationIds?: string[];
+  password?: string;
   isActive?: boolean;
 }
 

@@ -574,7 +574,15 @@ export function transformUserToStaffListItem(
       coverageAreaId?: CoverageArea | string;
     }>;
   }
-): StaffListItem {
+): StaffListItem | null {
+  // Validate authority: only transform users with authority >= 60 and authority !== 100
+  // This ensures stakeholders and super admins are excluded
+  const authority = (user as any).authority || 20;
+  if (authority < 60 || authority === 100) {
+    console.warn(`[transformUserToStaffListItem] Skipping user ${user.email} - invalid authority: ${authority}`);
+    return null;
+  }
+
   const fullName = [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ');
 
   // Transform roles
@@ -631,6 +639,24 @@ export function transformUserToStaffListItem(
     };
   }).filter((ca): ca is NonNullable<typeof ca> => ca !== null);
 
+  // Transform organizations array (coordinators can have multiple)
+  const transformedOrganizations = ((user as any).organizations || []).map((org: any) => {
+    // Handle both ObjectId references and embedded objects
+    const orgId = org.organizationId?._id || org.organizationId?._id?.toString() || 
+                  (typeof org.organizationId === 'string' ? org.organizationId : org.organizationId?.toString()) ||
+                  org._id?.toString() || '';
+    
+    return {
+      id: orgId,
+      name: org.organizationName || org.name || '',
+      type: (org.organizationType || org.type || 'Other') as 'LGU' | 'NGO' | 'Hospital' | 'BloodBank' | 'RedCross' | 'Non-LGU' | 'Other',
+      isPrimary: org.isPrimary || false,
+    };
+  }).filter(org => org.id && org.name); // Filter out invalid organizations
+
+  // Get primary organization for backward compatibility
+  const primaryOrg = transformedOrganizations.find(org => org.isPrimary) || transformedOrganizations[0] || null;
+
   return {
     id: user._id,
     email: user.email,
@@ -639,9 +665,10 @@ export function transformUserToStaffListItem(
     lastName: user.lastName,
     fullName,
     phoneNumber: user.phoneNumber,
-    organizationType: user.organizationType,
-    organizationName: user.organizationInstitution,
-    organizationId: user.organizationId,
+    organizationType: primaryOrg?.type || user.organizationType,
+    organizationName: primaryOrg?.name || user.organizationInstitution,
+    organizationId: primaryOrg?.id || user.organizationId,
+    organizations: transformedOrganizations.length > 0 ? transformedOrganizations : undefined,
     roles: transformedRoles,
     coverageAreas: transformedCoverageAreas,
     isActive: user.isActive,

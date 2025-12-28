@@ -87,7 +87,9 @@ export default function CoordinatorManagement() {
   };
 
   const handleDeleteStaff = (id: string, name?: string) => {
-    setDeletingStaff({ id, name: name || "" });
+    const staffMember = staff.find((s) => s.id === id);
+    const staffName = name || staffMember?.fullName || "";
+    setDeletingStaff({ id, name: staffName });
     setIsDeleteModalOpen(true);
   };
 

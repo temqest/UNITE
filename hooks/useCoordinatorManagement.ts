@@ -143,11 +143,26 @@ export function useCoordinatorManagement(): UseCoordinatorManagementReturn {
       const response = await listStaffByCapability(operationalCapabilities, apiFilters);
 
       if (response.success && response.data) {
+        // Apply authority-based filtering: only include users with authority >= 60 and authority !== 100
+        // This is a defensive layer to ensure stakeholders and super admins are excluded
+        const validStaffUsers = response.data.filter((user: any) => {
+          const authority = user.authority || 20;
+          const isValidStaff = authority >= 60 && authority !== 100;
+          
+          if (!isValidStaff) {
+            console.log(`[fetchStaff] Filtered out user: ${user.email} (authority: ${authority})`);
+          }
+          
+          return isValidStaff;
+        });
+
+        console.log(`[fetchStaff] Authority filtering: ${response.data.length} users from API, ${validStaffUsers.length} valid staff members`);
+
         // Transform each user to StaffListItem
         // We need to fetch roles and coverage areas for each user
         const staffList: StaffListItem[] = [];
         
-        for (const user of response.data) {
+        for (const user of validStaffUsers) {
           try {
             // Fetch roles and coverage areas
             const [rolesResponse, coverageResponse] = await Promise.all([
@@ -188,11 +203,17 @@ export function useCoordinatorManagement(): UseCoordinatorManagementReturn {
               coverageAssignments,
             });
 
-            staffList.push(staffItem);
+            // Only add if transformation succeeded (returns null for invalid users)
+            if (staffItem) {
+              staffList.push(staffItem);
+            }
           } catch (err) {
             console.error(`Failed to fetch details for user ${user._id}:`, err);
-            // Still add the user with empty roles/coverage
-            staffList.push(transformUserToStaffListItem(user));
+            // Try to add the user (transform function will validate authority)
+            const staffItem = transformUserToStaffListItem(user);
+            if (staffItem) {
+              staffList.push(staffItem);
+            }
           }
         }
 
@@ -281,7 +302,7 @@ export function useCoordinatorManagement(): UseCoordinatorManagementReturn {
   }, [fetchStaff]);
 
   /**
-   * Delete staff member
+   * Delete staff member (soft delete - sets isActive to false)
    */
   const deleteStaffMember = useCallback(async (id: string): Promise<void> => {
     try {
@@ -289,18 +310,19 @@ export function useCoordinatorManagement(): UseCoordinatorManagementReturn {
       const response = await deleteStaff(id);
       
       if (response.success) {
-        // Remove from list
-        setStaff(prev => prev.filter(s => s.id !== id));
+        // Refresh the staff list to reflect the deletion (soft-deleted users won't appear in API response)
+        await fetchStaff();
+        // Also remove from selected list
         setSelectedStaff(prev => prev.filter(s => s !== id));
       } else {
-        throw new Error(response.message || 'Failed to delete staff');
+        throw new Error(response.message || 'Failed to deactivate staff');
       }
     } catch (err: any) {
-      console.error('Failed to delete staff:', err);
-      setError(err.message || 'Failed to delete staff');
+      console.error('Failed to deactivate staff:', err);
+      setError(err.message || 'Failed to deactivate staff');
       throw err;
     }
-  }, []);
+  }, [fetchStaff]);
 
   /**
    * Assign role to staff

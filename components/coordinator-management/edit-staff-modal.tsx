@@ -17,6 +17,7 @@ import { useRoles } from "@/hooks/useRoles";
 import CoverageAssignmentModal from "./coverage-assignment-modal";
 import type { StaffListItem, UpdateStaffData, Role, CoverageArea } from "@/types/coordinator.types";
 import { getUserRoles, getUserCoverageAreas, assignRole, revokeRole, getAssignableRoles } from "@/services/coordinatorService";
+import { fetchJsonWithAuth } from "@/utils/fetchWithAuth";
 
 interface EditStaffModalProps {
   isOpen: boolean;
@@ -49,8 +50,13 @@ export default function EditStaffModal({
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [organizationType, setOrganizationType] = useState<string>("");
-  const [organizationInstitution, setOrganizationInstitution] = useState("");
+  const [selectedOrganizations, setSelectedOrganizations] = useState<string[]>([]);
+  const [availableOrganizations, setAvailableOrganizations] = useState<Array<{
+    _id: string;
+    name: string;
+    type: string;
+  }>>([]);
+  const [loadingOrganizations, setLoadingOrganizations] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,6 +97,13 @@ export default function EditStaffModal({
   }>>([]);
   const [isCoverageModalOpen, setIsCoverageModalOpen] = useState(false);
 
+  // Load available organizations when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadAvailableOrganizations();
+    }
+  }, [isOpen]);
+
   // Load staff data when modal opens
   useEffect(() => {
     if (isOpen && staff) {
@@ -99,12 +112,17 @@ export default function EditStaffModal({
       setLastName(staff.lastName);
       setEmail(staff.email);
       setPhoneNumber(staff.phoneNumber || "");
-      setOrganizationType(staff.organizationType || "");
-      setOrganizationInstitution(staff.organizationName || "");
       setNewPassword("");
       setValidationErrors([]);
       setCurrentRoles(staff.roles || []);
       setCurrentCoverageAreas(staff.coverageAreas || []);
+
+      // Load coordinator's current organizations
+      if (staff.organizations && staff.organizations.length > 0) {
+        setSelectedOrganizations(staff.organizations.map(org => org.id));
+      } else {
+        setSelectedOrganizations([]);
+      }
 
       // Load full role and coverage data
       loadStaffDetails();
@@ -123,6 +141,21 @@ export default function EditStaffModal({
       setAvailableRoles(rolesToUse);
     }
   }, [assignableRoles, allRoles, currentRoles]);
+
+  const loadAvailableOrganizations = async () => {
+    try {
+      setLoadingOrganizations(true);
+      const response = await fetchJsonWithAuth('/api/organizations?isActive=true&limit=1000');
+      
+      if (response.success && response.data) {
+        setAvailableOrganizations(response.data);
+      }
+    } catch (err) {
+      console.error("Failed to load organizations:", err);
+    } finally {
+      setLoadingOrganizations(false);
+    }
+  };
 
   const loadStaffDetails = async () => {
     if (!staff) return;
@@ -164,27 +197,30 @@ export default function EditStaffModal({
     setIsSubmitting(true);
     setValidationErrors([]);
 
+    // Validate organizations
+    if (selectedOrganizations.length === 0) {
+      setValidationErrors(["At least one organization must be selected"]);
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const updateData: UpdateStaffData = {
         firstName,
         middleName: middleName || undefined,
         lastName,
         phoneNumber: phoneNumber || undefined,
-        organizationType: organizationType
-          ? (organizationType as UpdateStaffData["organizationType"])
-          : undefined,
-        organizationInstitution: organizationInstitution || undefined,
+        organizationIds: selectedOrganizations,
       };
 
-      // Only include password if provided
+      // Include password if provided
       if (newPassword) {
         if (newPassword.length < 6) {
           setValidationErrors(["Password must be at least 6 characters long"]);
           setIsSubmitting(false);
           return;
         }
-        // Password update would need a separate endpoint
-        // For now, we'll skip it in the update
+        updateData.password = newPassword;
       }
 
       await onUpdateStaff(staff.id, updateData);
@@ -195,6 +231,16 @@ export default function EditStaffModal({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleToggleOrganization = (orgId: string) => {
+    setSelectedOrganizations(prev => {
+      if (prev.includes(orgId)) {
+        return prev.filter(id => id !== orgId);
+      } else {
+        return [...prev, orgId];
+      }
+    });
   };
 
   const handleAddRole = async () => {
@@ -369,35 +415,48 @@ export default function EditStaffModal({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Organization Type</label>
-                      <Select
-                        placeholder="Select organization type"
-                        selectedKeys={organizationType ? [organizationType] : []}
-                        onSelectionChange={(keys: any) => {
-                          const type = Array.from(keys)[0] as string;
-                          setOrganizationType(type || "");
-                        }}
-                        classNames={{ trigger: "h-10" }}
-                      >
-                        {organizationTypes.map((type) => (
-                          <SelectItem key={type.key} textValue={type.label}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Organization Name</label>
-                      <Input
-                        classNames={{ inputWrapper: "h-10" }}
-                        type="text"
-                        value={organizationInstitution}
-                        variant="bordered"
-                        onChange={(e) => setOrganizationInstitution(e.target.value)}
-                      />
-                    </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Organizations
+                    </label>
+                    {loadingOrganizations ? (
+                      <div className="text-sm text-gray-500 p-3 bg-gray-50 rounded border border-gray-200">
+                        Loading organizations...
+                      </div>
+                    ) : availableOrganizations.length === 0 ? (
+                      <div className="text-sm text-gray-500 p-3 bg-gray-50 rounded border border-gray-200">
+                        No organizations available
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto p-3 bg-gray-50 rounded border border-gray-200">
+                        {availableOrganizations.map((org) => {
+                          const isSelected = selectedOrganizations.includes(org._id);
+                          return (
+                            <div
+                              key={org._id}
+                              className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-pointer"
+                              onClick={() => handleToggleOrganization(org._id)}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleOrganization(org._id)}
+                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-gray-900">{org.name}</div>
+                                <div className="text-xs text-gray-500">{org.type}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {selectedOrganizations.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        At least one organization must be selected
+                      </p>
+                    )}
                   </div>
 
                   <div>

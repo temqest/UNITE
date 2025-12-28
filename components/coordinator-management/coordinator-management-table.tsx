@@ -199,61 +199,75 @@ export default function CoordinatorTable({
                   {coordinator.phoneNumber || "—"}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-600">
-                  <div className="flex flex-wrap gap-1">
-                    {coordinator.roles && coordinator.roles.length > 0 ? (
-                      coordinator.roles.length <= 2 ? (
-                        coordinator.roles.map((role) => (
-                          <Chip key={role.id} size="sm" variant="flat" color="primary">
-                            {role.name}
-                          </Chip>
-                        ))
-                      ) : (
-                        <Chip size="sm" variant="flat" color="primary" title={coordinator.roles.map(r => r.name).join(", ")}>
-                          {coordinator.roles.length} roles
-                        </Chip>
-                      )
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
-                  </div>
+                  {coordinator.roles && coordinator.roles.length > 0 ? (
+                    coordinator.roles.map((role, index) => (
+                      <span key={role.id}>
+                        {role.name}
+                        {index < coordinator.roles.length - 1 && ", "}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-600">
-                  <div className="flex flex-wrap gap-1">
-                    {coordinator.coverageAreas && coordinator.coverageAreas.length > 0 ? (
-                      coordinator.coverageAreas.length <= 2 ? (
-                        coordinator.coverageAreas.map((ca) => (
-                          <Chip
-                            key={ca.id}
-                            size="sm"
+                  {coordinator.coverageAreas && coordinator.coverageAreas.length > 0 ? (
+                    coordinator.coverageAreas.map((ca, index) => (
+                      <span key={ca.id}>
+                        {ca.name}
+                        {ca.isPrimary && " (Primary)"}
+                        {index < coordinator.coverageAreas.length - 1 && ", "}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-600">
+                  {coordinator.organizations && coordinator.organizations.length > 0 ? (
+                    coordinator.organizations.length === 1 ? (
+                      <div>
+                        <div className="font-medium">{coordinator.organizations[0].type}</div>
+                        <div className="text-xs text-gray-500">{coordinator.organizations[0].name}</div>
+                      </div>
+                    ) : (
+                      <Dropdown>
+                        <DropdownTrigger>
+                          <Button
                             variant="flat"
-                            color={ca.isPrimary ? "primary" : "default"}
-                            title={
-                              ca.geographicUnits.length > 0
-                                ? ca.geographicUnits.map((unit) => unit.name).join(", ")
-                                : ca.name
-                            }
+                            size="sm"
+                            className="text-gray-700 hover:text-gray-900 h-auto py-1"
                           >
-                            {ca.name}
-                            {ca.isPrimary && " (Primary)"}
-                          </Chip>
-                        ))
-                      ) : (
-                        <Chip
-                          size="sm"
-                          variant="flat"
-                          color="default"
-                          title={coordinator.coverageAreas.map(ca => ca.name).join(", ")}
-                        >
-                          {coordinator.coverageAreas.length} coverage areas
-                        </Chip>
-                      )
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-600">
-                  {coordinator.organizationType ? (
+                            <div className="text-left">
+                              <div className="font-medium">{coordinator.organizations[0].type}</div>
+                              <div className="text-xs text-gray-500">
+                                {coordinator.organizations[0].name}
+                                <span className="ml-1 text-gray-400">
+                                  (+{coordinator.organizations.length - 1} more)
+                                </span>
+                              </div>
+                            </div>
+                          </Button>
+                        </DropdownTrigger>
+                        <DropdownMenu aria-label="Organizations" variant="faded">
+                          <DropdownSection title={`${coordinator.organizations.length} Organizations`}>
+                            {coordinator.organizations.map((org) => (
+                              <DropdownItem
+                                key={org.id}
+                                description={org.isPrimary ? "Primary organization" : undefined}
+                                textValue={`${org.type} - ${org.name}`}
+                              >
+                                <div>
+                                  <div className="font-medium">{org.type}</div>
+                                  <div className="text-xs text-gray-500">{org.name}</div>
+                                </div>
+                              </DropdownItem>
+                            ))}
+                          </DropdownSection>
+                        </DropdownMenu>
+                      </Dropdown>
+                    )
+                  ) : coordinator.organizationType ? (
                     <div>
                       <div className="font-medium">{coordinator.organizationType}</div>
                       {coordinator.organizationName && (
@@ -309,7 +323,7 @@ export default function CoordinatorTable({
                               if (onDeleteCoordinator)
                                 onDeleteCoordinator(
                                   coordinator.id,
-                                  coordinator.name,
+                                  coordinator.fullName,
                                 );
                             }}
                           >

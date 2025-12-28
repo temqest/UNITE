@@ -40,11 +40,12 @@ export default function DeleteCoordinatorModal({
 
   const matches = () => {
     if (!coordinatorName) return false;
+    if (!typedName || typedName.trim().length === 0) return false;
 
-    // Case-insensitive, trimmed comparison
-    return (
-      typedName.trim().toLowerCase() === coordinatorName.trim().toLowerCase()
-    );
+    // Case-insensitive, trimmed comparison - must match exactly
+    const typed = typedName.trim().toLowerCase();
+    const expected = coordinatorName.trim().toLowerCase();
+    return typed === expected;
   };
 
   const handleDelete = async () => {
@@ -77,9 +78,9 @@ export default function DeleteCoordinatorModal({
       <ModalContent>
         <ModalHeader className="flex items-center gap-3 pb-2">
           <div>
-            <h2 className="text-lg font-semibold">Confirm delete</h2>
+            <h2 className="text-lg font-semibold">Confirm Deactivation</h2>
             <p className="text-xs text-default-500">
-              Type the full name of the staff member to confirm deletion.
+              Type the full name of the staff member to confirm deactivation.
             </p>
           </div>
         </ModalHeader>
@@ -87,28 +88,28 @@ export default function DeleteCoordinatorModal({
         <ModalBody>
           <div className="space-y-3">
             <div>
-              <p className="text-sm">Staff Member</p>
-              <div className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-medium text-gray-700 mb-1">Staff Member</p>
+              <div className="text-sm font-semibold text-gray-900 p-2 bg-gray-50 rounded border border-gray-200">
                 {coordinatorName || "—"}
               </div>
             </div>
 
-            <div className="p-3 bg-danger-50 border border-danger-200 rounded">
-              <p className="text-sm font-semibold text-danger">
-                Irreversible action
+            <div className="p-3 bg-warning-50 border border-warning-200 rounded">
+              <p className="text-sm font-semibold text-warning-800">
+                Deactivate Account
               </p>
-              <p className="text-xs text-danger">
-                Deleting a staff member is permanent and cannot be undone. The account will be deactivated. Proceed only if you are sure.
+              <p className="text-xs text-warning-700">
+                This will deactivate the staff member's account. They will no longer be able to access the system, but their account data will be preserved. This action can be reversed by reactivating the account.
               </p>
             </div>
 
             <div>
               <label className="text-sm font-medium">
-                Type full name to confirm
+                Type "{coordinatorName || "full name"}" to confirm
               </label>
               <Input
                 classNames={{ inputWrapper: "h-10" }}
-                placeholder="Full name"
+                placeholder={coordinatorName || "Full name"}
                 value={typedName}
                 variant="bordered"
                 onChange={(e) =>
@@ -125,13 +126,13 @@ export default function DeleteCoordinatorModal({
           <Button variant="bordered" onPress={onClose}>
             Cancel
           </Button>
-          <Button
-            className="bg-red-600 text-white"
-            color="danger"
-            disabled={!matches() || isDeleting}
+            <Button
+            className="bg-warning-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            color="warning"
+            isDisabled={!matches() || isDeleting}
             onPress={handleDelete}
           >
-            {isDeleting ? "Deleting..." : "Delete Staff"}
+            {isDeleting ? "Deactivating..." : "Deactivate"}
           </Button>
         </ModalFooter>
       </ModalContent>
