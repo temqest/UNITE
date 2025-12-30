@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Ticket, Calendar as CalIcon, PersonPlanetEarth, Persons, Bell, Gear } from "@gravity-ui/icons";
 import { Modal } from "@heroui/modal";
+import { Spinner } from "@heroui/spinner";
 
 import { getUserInfo } from "../../../utils/getUserInfo";
 import MobileNav from "@/components/tools/mobile-nav";
@@ -199,14 +200,91 @@ export default function CampaignPage() {
     if (!tab || tab === "all") return undefined;
     // Normalize to lowercase for case-insensitive matching
     const normalizedTab = tab.toLowerCase().trim();
+    // Backend expects "pending" (not "pending-review") to map to status group
+    // The backend's _mapStatusFilterToStatusGroup maps "pending" to [PENDING_REVIEW, REVIEW_RESCHEDULED]
     if (normalizedTab === "approved") return "approved";
-    if (normalizedTab === "pending") return "pending-review";
+    if (normalizedTab === "pending") return "pending";
     if (normalizedTab === "rejected") return "rejected";
 
     return normalizedTab;
   };
 
+  // Fetch global counts without status filter - used for tab badges
+  // This ensures counts always reflect the total dataset breakdown regardless of selected tab
+  const fetchGlobalCounts = async () => {
+    try {
+      const token =
+        localStorage.getItem("unite_token") ||
+        sessionStorage.getItem("unite_token");
+      const headers: any = { "Content-Type": "application/json" };
+
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      // Build query params for server-side filtering
+      // IMPORTANT: Do NOT include status parameter - we want global counts
+      const params = new URLSearchParams();
+      // Use limit=1 since we only need counts, not the actual data
+      params.set("skip", "0");
+      params.set("limit", "1");
+
+      // Apply all other filters except status
+      if (searchQuery && searchQuery.trim())
+        params.set("search", searchQuery.trim());
+
+      if (quickFilter?.category && quickFilter.category !== "all")
+        params.set("category", quickFilter.category);
+      if (quickFilter?.startDate) params.set("date_from", quickFilter.startDate);
+      if (quickFilter?.endDate) params.set("date_to", quickFilter.endDate);
+      if (quickFilter?.province) params.set("province", String(quickFilter.province));
+      if (quickFilter?.district)
+        params.set("district", String(quickFilter.district));
+      if (quickFilter?.municipality)
+        params.set("municipalityId", String(quickFilter.municipality));
+
+      if (advancedFilter.title)
+        params.set("title", String(advancedFilter.title));
+      if (advancedFilter.coordinator)
+        params.set("coordinator", String(advancedFilter.coordinator));
+      if (advancedFilter.stakeholder)
+        params.set("stakeholder", String(advancedFilter.stakeholder));
+      if (advancedFilter.start)
+        params.set("date_from", String(advancedFilter.start));
+      if (advancedFilter.end)
+        params.set("date_to", String(advancedFilter.end));
+
+      // Use new unified endpoint - no status filter
+      const url = `${API_URL}/api/event-requests?${params.toString()}`;
+      const res = await fetch(url, { headers, cache: "no-store" });
+      const body = await res.json();
+
+      if (!res.ok) {
+        console.error("Failed to fetch global counts:", body.message);
+        return; // Don't throw - counts are not critical for functionality
+      }
+
+      // New response format: { success, data: { requests, count, statusCounts } }
+      const responseData = body.data || {};
+      
+      // Use server-side status counts if available
+      if (responseData.statusCounts) {
+        debug("[Campaign] Global counts received:", responseData.statusCounts);
+        setRequestCounts({
+          all: responseData.statusCounts.all ?? 0,
+          approved: responseData.statusCounts.approved ?? 0,
+          pending: responseData.statusCounts.pending ?? 0,
+          rejected: responseData.statusCounts.rejected ?? 0,
+        });
+      } else {
+        console.warn("[Campaign] No statusCounts in response for global counts");
+      }
+    } catch (err: any) {
+      console.error("Fetch global counts error", err);
+      // Don't show error modal for counts - it's not critical
+    }
+  };
+
   // Extracted fetchRequests so we can reuse after creating events. Relies on backend filtering instead of client-side filtering.
+  // This function only fetches filtered data - counts are handled separately by fetchGlobalCounts
   const fetchRequests = async () => {
     setIsLoadingRequests(true);
     setRequestsError("");
@@ -227,7 +305,12 @@ export default function CampaignPage() {
       params.set("limit", String(pageSize));
 
       const statusParam = mapTabToStatusParam(selectedTab);
-      if (statusParam) params.set("status", statusParam);
+      if (statusParam) {
+        params.set("status", statusParam);
+        debug("[Campaign] Fetching requests with status filter:", statusParam, "for tab:", selectedTab);
+      } else {
+        debug("[Campaign] Fetching all requests (no status filter)");
+      }
 
       // Note: New API may not support all these filters yet, but we'll pass them for backward compatibility
       if (searchQuery && searchQuery.trim())
@@ -270,42 +353,20 @@ export default function CampaignPage() {
                    Array.isArray(body) ? body : [];
       const totalCount = responseData.count ?? list.length;
 
+      debug("[Campaign] Fetched requests:", {
+        tab: selectedTab,
+        statusParam,
+        count: list.length,
+        totalCount,
+        firstItemStatus: list[0]?.status || list[0]?.Status || "N/A"
+      });
+
       setRequests(list);
       setTotalRequestsCount(totalCount);
       setIsServerPaged(totalCount > list.length);
       
-      // Use server-side status counts if available, otherwise calculate from current page
-      if (responseData.statusCounts) {
-        setRequestCounts({
-          all: responseData.statusCounts.all ?? totalCount,
-          approved: responseData.statusCounts.approved ?? 0,
-          pending: responseData.statusCounts.pending ?? 0,
-          rejected: responseData.statusCounts.rejected ?? 0,
-        });
-      } else {
-        // Fallback: calculate from current page (less accurate but better than nothing)
-        const statusCounts = {
-          approved: list.filter((r: any) => {
-            const status = r.status || r.Status || "";
-            return status.toLowerCase().includes("approv") || status.toLowerCase().includes("complete");
-          }).length,
-          pending: list.filter((r: any) => {
-            const status = r.status || r.Status || "";
-            return status.toLowerCase().includes("pending") || status.toLowerCase().includes("review");
-          }).length,
-          rejected: list.filter((r: any) => {
-            const status = r.status || r.Status || "";
-            return status.toLowerCase().includes("reject");
-          }).length,
-        };
-
-        setRequestCounts({
-          all: totalCount,
-          approved: statusCounts.approved,
-          pending: statusCounts.pending,
-          rejected: statusCounts.rejected,
-        });
-      }
+      // Note: Counts are now handled separately by fetchGlobalCounts
+      // This ensures counts always reflect global totals, not filtered results
     } catch (err: any) {
       console.error("Fetch requests error", err);
       setRequestsError(err.message || "Failed to fetch requests");
@@ -326,7 +387,8 @@ export default function CampaignPage() {
       setIsLoading(true);
     }
 
-    // load requests and also initialize the displayed user name/email for the topbar
+    // load global counts and requests on initial mount
+    fetchGlobalCounts();
     fetchRequests();
     // fetch published events for the calendar
     (async () => {
@@ -407,7 +469,17 @@ export default function CampaignPage() {
     JSON.stringify(advancedFilter),
   ]);
 
-  // Re-fetch requests whenever filters or pagination change
+  // Re-fetch global counts when non-status filters change
+  // Note: We don't update counts when selectedTab changes - counts should always show global totals
+  useEffect(() => {
+    fetchGlobalCounts();
+  }, [
+    searchQuery,
+    JSON.stringify(quickFilter),
+    JSON.stringify(advancedFilter),
+  ]);
+
+  // Re-fetch requests whenever filters, pagination, or tab change
   useEffect(() => {
     // fetchRequests is defined above in the component scope
     (async () => {
@@ -434,8 +506,9 @@ export default function CampaignPage() {
           evt?.detail,
         );
       } catch (e) {}
-      // Re-fetch current list to reflect updates made elsewhere
+      // Re-fetch global counts and current list to reflect updates made elsewhere
       try {
+        fetchGlobalCounts();
         fetchRequests();
       } catch (e) {}
     };
@@ -653,7 +726,8 @@ export default function CampaignPage() {
 
         if (!res.ok) throw new Error(resp.message || "Failed to create event");
 
-        // refresh requests list to show the newly created event
+        // refresh global counts and requests list to show the newly created event
+        await fetchGlobalCounts();
         await fetchRequests();
 
         return resp;
@@ -674,6 +748,8 @@ export default function CampaignPage() {
         if (!res.ok)
           throw new Error(resp.message || "Failed to create request");
 
+        // refresh global counts and requests list to show the newly created request
+        await fetchGlobalCounts();
         await fetchRequests();
 
         return resp;
@@ -856,7 +932,8 @@ export default function CampaignPage() {
 
       console.log("[CampaignPage] Reschedule succeeded, refreshing requests list");
       
-      // refresh requests list to reflect updated date/status
+      // refresh global counts and requests list to reflect updated date/status
+      await fetchGlobalCounts();
       await fetchRequests();
 
       console.log("[CampaignPage] Requests list refreshed");
@@ -904,7 +981,8 @@ export default function CampaignPage() {
 
       if (!res.ok) throw new Error(resp.message || "Failed to cancel request");
 
-      // refresh requests list to reflect cancellation
+      // refresh global counts and requests list to reflect cancellation
+      await fetchGlobalCounts();
       await fetchRequests();
 
       return resp;
@@ -1254,26 +1332,10 @@ export default function CampaignPage() {
               centered in the visible viewport regardless of inner scroll position. */}
           {isLoadingRequests && (
             <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-20 pointer-events-none">
-              <svg
-                className="animate-spin h-12 w-12 text-default-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                  fill="currentColor"
-                />
-              </svg>
+              <div className="flex items-center justify-center gap-2">
+                <Spinner size="sm" />
+                <span className="text-sm text-default-600">Loading requests...</span>
+              </div>
             </div>
           )}
 
@@ -1324,6 +1386,7 @@ export default function CampaignPage() {
           setEditRequest(null);
         }}
         onSaved={async () => {
+          await fetchGlobalCounts();
           await fetchRequests();
         }}
       />

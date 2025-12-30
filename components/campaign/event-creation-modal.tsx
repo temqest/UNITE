@@ -210,6 +210,7 @@ export const CreateTrainingEventModal: React.FC<
 
                   return (
                     <Select
+                      aria-label="Coordinator"
                       classNames={{
                         trigger:
                           "border-default-200 hover:border-default-400 h-10",
@@ -333,6 +334,7 @@ export const CreateTrainingEventModal: React.FC<
 
                 return (
                   <Select
+                    aria-label="Stakeholder"
                     classNames={{
                       trigger: "border-default-200 h-9",
                     }}
@@ -409,6 +411,7 @@ export const CreateTrainingEventModal: React.FC<
                 <label className="text-xs font-medium">Date</label>
                 {isSysAdmin ? (
                   <DatePicker
+                    aria-label="Event date"
                     hideTimeZone
                     classNames={{
                       base: "w-full",
@@ -756,6 +759,7 @@ export const CreateBloodDriveEventModal: React.FC<
                 <Input disabled value={`Error: ${coordinatorError}`} variant="bordered" />
               ) : isSysAdmin ? (
                 <Select
+                  aria-label="Coordinator"
                   classNames={{ trigger: "border-default-200 hover:border-default-400 h-10", value: "text-sm" }}
                   placeholder="Select one"
                   selectedKeys={coordinator ? [coordinator] : []}
@@ -788,6 +792,7 @@ export const CreateBloodDriveEventModal: React.FC<
                 <Input disabled value={`Error: ${stakeholderError}`} variant="bordered" />
               ) : isSysAdmin || (coordinator && coordinatorOptions.length > 0) ? (
                 <Select
+                  aria-label="Stakeholder"
                   classNames={{ trigger: "border-default-200 hover:border-default-400 h-10", value: "text-sm" }}
                   placeholder="Select one"
                   selectedKeys={stakeholder ? [stakeholder] : []}
@@ -845,6 +850,7 @@ export const CreateBloodDriveEventModal: React.FC<
                 <label className="text-xs font-medium">Date</label>
                 {isSysAdmin ? (
                   <DatePicker
+                    aria-label="Event date"
                     hideTimeZone
                     classNames={{
                       base: "w-full",
@@ -1202,6 +1208,7 @@ export const CreateAdvocacyEventModal: React.FC<
                 <Input disabled value={`Error: ${coordinatorError}`} variant="bordered" />
               ) : isSysAdmin ? (
                 <Select
+                  aria-label="Coordinator"
                   classNames={{ trigger: "border-default-200 hover:border-default-400 h-10", value: "text-sm" }}
                   placeholder="Select one"
                   selectedKeys={coordinator ? [coordinator] : []}
@@ -1234,6 +1241,7 @@ export const CreateAdvocacyEventModal: React.FC<
                 <Input disabled value={`Error: ${stakeholderError}`} variant="bordered" />
               ) : isSysAdmin || (coordinator && coordinatorOptions.length > 0) ? (
                 <Select
+                  aria-label="Stakeholder"
                   classNames={{ trigger: "border-default-200 hover:border-default-400 h-10", value: "text-sm" }}
                   placeholder="Select one"
                   selectedKeys={stakeholder ? [stakeholder] : []}
@@ -1311,6 +1319,7 @@ export const CreateAdvocacyEventModal: React.FC<
                 <label className="text-xs font-medium">Date</label>
                 {isSysAdmin ? (
                   <DatePicker
+                    aria-label="Event date"
                     hideTimeZone
                     classNames={{
                       base: "w-full",

@@ -74,6 +74,13 @@ export async function fetchJsonWithAuth(
 
     err.response = res;
     err.body = body;
+    err.status = res.status;
+    
+    // For 401/403 errors, mark as authentication error for easier handling
+    if (res.status === 401 || res.status === 403) {
+      err.isAuthError = true;
+    }
+    
     throw err;
   }
 

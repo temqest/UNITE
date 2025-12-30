@@ -125,7 +125,6 @@ export function useEventUserData(
 
       const headers = getAuthHeaders();
       const userAuthority = await getUserAuthority(userId);
-      console.log(`[fetchCoordinators] User authority: ${userAuthority}`);
 
       // System Admin (authority >= 80): Query all coordinators
       // Coordinators must have: authority >= 60 and < 80 AND request.create capability
@@ -156,18 +155,34 @@ export function useEventUserData(
         });
 
         if (coordinatorUsers.length > 0) {
-          const opts = coordinatorUsers.map((u: any) => ({
-            key: u._id || u.id,
-            label: formatUserName(u) || `${u.firstName || ''} ${u.lastName || ''}`.trim(),
-          }));
+          const opts = coordinatorUsers.map((u: any) => {
+            const fullName = formatUserName(u) || `${u.firstName || ''} ${u.lastName || ''}`.trim();
+            
+            // Get coverage area info from coverageAreas
+            let coverageLabel = "";
+            if (u.coverageAreas && u.coverageAreas.length > 0) {
+              const firstCoverage = u.coverageAreas[0];
+              // Prefer coverageAreaName, fallback to districtName or districtIds
+              if (firstCoverage.coverageAreaName) {
+                coverageLabel = ` - ${firstCoverage.coverageAreaName}`;
+              } else if (firstCoverage.districtName) {
+                coverageLabel = ` - ${firstCoverage.districtName}`;
+              } else if (firstCoverage.districtIds && firstCoverage.districtIds.length > 0) {
+                coverageLabel = ` - District ${firstCoverage.districtIds[0]}`;
+              }
+            }
+            
+            return {
+              key: u._id || u.id,
+              label: `${fullName}${coverageLabel}`,
+            };
+          });
 
           setCoordinatorOptions(opts);
           setIsSysAdmin(true);
           setStakeholderLocked(false); // System admins can select stakeholders
-          console.log(`[fetchCoordinators] Loaded ${opts.length} coordinators for System Admin (filtered from ${usersList.length} total users)`);
         } else {
           setCoordinatorOptions([]);
-          console.warn(`[fetchCoordinators] No coordinators found after filtering (authority >= 60 and < 80). Total users: ${usersList.length}`);
         }
         setLoadingCoordinators(false);
         return;
@@ -192,9 +207,7 @@ export function useEventUserData(
           ]);
           setIsSysAdmin(false);
           setStakeholderLocked(false); // Coordinators can select stakeholders
-          console.log(`[fetchCoordinators] Auto-locked coordinator to self: ${userId}`);
         } else {
-          console.error('[fetchCoordinators] Failed to fetch coordinator user data');
           setCoordinatorError('Failed to load coordinator information');
         }
         setLoadingCoordinators(false);
@@ -227,11 +240,6 @@ export function useEventUserData(
           if (!coordResolverRes.ok) {
             if (coordResolverRes.status === 404) {
               const errorData = await coordResolverRes.json().catch(() => ({}));
-              console.error('[fetchCoordinators] No coordinator found for stakeholder:', {
-                status: coordResolverRes.status,
-                error: errorData.message || 'No matching coordinator found',
-                diagnostic: errorData.diagnostic
-              });
               setCoordinatorError(errorData.message || 'No assigned coordinator found');
             } else {
               throw new Error(`Failed to resolve coordinator: ${coordResolverRes.status} ${coordResolverRes.statusText}`);
@@ -255,48 +263,82 @@ export function useEventUserData(
                                    `${coordinatorInfo.firstName || ''} ${coordinatorInfo.lastName || ''}`.trim() ||
                                    'Coordinator';
               
+              // Get coverage area info for single coordinator
+              let coverageLabel = "";
+              if (coordinatorInfo.coverageAreas && coordinatorInfo.coverageAreas.length > 0) {
+                const firstCoverage = coordinatorInfo.coverageAreas[0];
+                if (firstCoverage.coverageAreaName) {
+                  coverageLabel = ` - ${firstCoverage.coverageAreaName}`;
+                } else if (firstCoverage.districtName) {
+                  coverageLabel = ` - ${firstCoverage.districtName}`;
+                } else if (firstCoverage.districtIds && firstCoverage.districtIds.length > 0) {
+                  coverageLabel = ` - District ${firstCoverage.districtIds[0]}`;
+                }
+              }
+              
               // If multiple coordinators, show all options
               if (coordData.data?.coordinators && coordData.data.coordinators.length > 1) {
-                const opts = coordData.data.coordinators.map((c: any) => ({
-                  key: c._id.toString(),
-                  label: c.fullName || formatUserName(c) || `${c.firstName || ''} ${c.lastName || ''}`.trim(),
-                }));
+                const opts = coordData.data.coordinators.map((c: any) => {
+                  const cFullName = c.fullName || formatUserName(c) || `${c.firstName || ''} ${c.lastName || ''}`.trim();
+                  
+                  // Get coverage area info for each coordinator
+                  let cCoverageLabel = "";
+                  if (c.coverageAreas && c.coverageAreas.length > 0) {
+                    const firstCoverage = c.coverageAreas[0];
+                    if (firstCoverage.coverageAreaName) {
+                      cCoverageLabel = ` - ${firstCoverage.coverageAreaName}`;
+                    } else if (firstCoverage.districtName) {
+                      cCoverageLabel = ` - ${firstCoverage.districtName}`;
+                    } else if (firstCoverage.districtIds && firstCoverage.districtIds.length > 0) {
+                      cCoverageLabel = ` - District ${firstCoverage.districtIds[0]}`;
+                    }
+                  }
+                  
+                  return {
+                    key: c._id.toString(),
+                    label: `${cFullName}${cCoverageLabel}`,
+                  };
+                });
                 setCoordinatorOptions(opts);
                 setCoordinator(coordinatorId); // Auto-select first
-                console.log(`[fetchCoordinators] Loaded ${opts.length} coordinators for stakeholder (multiple found)`);
               } else {
                 // Single coordinator - lock it
                 setCoordinator(coordinatorId);
                 setCoordinatorOptions([
                   {
                     key: coordinatorId,
-                    label: coordFullName,
+                    label: `${coordFullName}${coverageLabel}`,
                   },
                 ]);
-                console.log(`[fetchCoordinators] Loaded assigned coordinator for stakeholder: ${coordinatorId}`);
               }
             } else {
-              console.warn('[fetchCoordinators] Coordinator endpoint returned unexpected structure:', coordData);
               setCoordinatorError('No assigned coordinator found');
             }
           }
 
           // Auto-lock stakeholder to self
+          // Get municipality info from user data
+          const userDataObj = userData.data || userData;
+          let municipalityLabel = "";
+          if (userDataObj.locations && userDataObj.locations.municipalityName) {
+            municipalityLabel = ` - ${userDataObj.locations.municipalityName}`;
+          } else if (userDataObj.municipalityName) {
+            municipalityLabel = ` - ${userDataObj.municipalityName}`;
+          }
+          
           setStakeholder(userId);
           setStakeholderOptions([
             {
               key: userId,
-              label: userFullName || 'Current User',
+              label: `${userFullName || 'Current User'}${municipalityLabel}`,
             },
           ]);
           setStakeholderLocked(true);
           
-          // Extract email and phone from user data for auto-filling
-          const userDataObj = userData.data || userData;
+          // Extract email and phone from user data for auto-filling (reuse userDataObj from above)
           setUserEmail(userDataObj.email || null);
           setUserPhone(userDataObj.phoneNumber || userDataObj.phone || null);
         } catch (err) {
-          console.error('[fetchCoordinators] Failed to fetch stakeholder coordinator:', err);
           setCoordinatorError(
             err instanceof Error ? err.message : 'Failed to load coordinator'
           );
@@ -306,7 +348,6 @@ export function useEventUserData(
       }
 
       // Fallback: If authority is null, try legacy detection
-      console.warn('[fetchCoordinators] User authority is null, using fallback detection');
       const rawUser = localStorage.getItem('unite_user');
       const user = rawUser ? JSON.parse(rawUser) : null;
       const { getUserInfo } = await import('@/utils/getUserInfo');
@@ -347,17 +388,33 @@ export function useEventUserData(
           });
           
           if (coordinatorUsers.length > 0) {
-            const opts = coordinatorUsers.map((u: any) => ({
-              key: u._id || u.id,
-              label: formatUserName(u) || `${u.firstName || ''} ${u.lastName || ''}`.trim(),
-            }));
+            const opts = coordinatorUsers.map((u: any) => {
+              const fullName = formatUserName(u) || `${u.firstName || ''} ${u.lastName || ''}`.trim();
+              
+              // Get coverage area info from coverageAreas
+              let coverageLabel = "";
+              if (u.coverageAreas && u.coverageAreas.length > 0) {
+                const firstCoverage = u.coverageAreas[0];
+                if (firstCoverage.coverageAreaName) {
+                  coverageLabel = ` - ${firstCoverage.coverageAreaName}`;
+                } else if (firstCoverage.districtName) {
+                  coverageLabel = ` - ${firstCoverage.districtName}`;
+                } else if (firstCoverage.districtIds && firstCoverage.districtIds.length > 0) {
+                  coverageLabel = ` - District ${firstCoverage.districtIds[0]}`;
+                }
+              }
+              
+              return {
+                key: u._id || u.id,
+                label: `${fullName}${coverageLabel}`,
+              };
+            });
             setCoordinatorOptions(opts);
           }
         }
       }
       setLoadingCoordinators(false);
     } catch (err) {
-      console.error('[fetchCoordinators] Failed to fetch coordinators:', err);
       setCoordinatorError(
         err instanceof Error ? err.message : 'Failed to load coordinators'
       );
@@ -384,7 +441,6 @@ export function useEventUserData(
         const userId = getCurrentUserId();
 
         if (!userId) {
-          console.warn('[fetchStakeholders] No user ID found');
           setStakeholderOptions([]);
           setLoadingStakeholders(false);
           return;
@@ -400,18 +456,27 @@ export function useEventUserData(
           });
           if (userRes.ok) {
             const userData = await userRes.json();
-            const userFullName = formatUserName(userData.data || userData);
+            const userDataObj = userData.data || userData;
+            const userFullName = formatUserName(userDataObj);
+            
+            // Get municipality info from user data
+            let municipalityLabel = "";
+            if (userDataObj.locations && userDataObj.locations.municipalityName) {
+              municipalityLabel = ` - ${userDataObj.locations.municipalityName}`;
+            } else if (userDataObj.municipalityName) {
+              municipalityLabel = ` - ${userDataObj.municipalityName}`;
+            }
+            
             setStakeholder(userId);
             setStakeholderOptions([
               {
                 key: userId,
-                label: userFullName || 'Current User',
+                label: `${userFullName || 'Current User'}${municipalityLabel}`,
               },
             ]);
             setStakeholderLocked(true);
             
-            // Extract email and phone from user data for auto-filling
-            const userDataObj = userData.data || userData;
+            // Extract email and phone from user data for auto-filling (reuse userDataObj from above)
             setUserEmail(userDataObj.email || null);
             setUserPhone(userDataObj.phoneNumber || userDataObj.phone || null);
             
@@ -455,22 +520,32 @@ export function useEventUserData(
         });
 
         if (stakeholderUsers.length > 0) {
-          const opts = stakeholderUsers.map((u: any) => ({
-            key: u._id || u.id,
-            label: formatUserName(u) || `${u.firstName || ''} ${u.lastName || ''}`.trim(),
-          }));
+          const opts = stakeholderUsers.map((u: any) => {
+            const fullName = formatUserName(u) || `${u.firstName || ''} ${u.lastName || ''}`.trim();
+            
+            // Get municipality info from locations
+            let municipalityLabel = "";
+            if (u.locations && u.locations.municipalityName) {
+              municipalityLabel = ` - ${u.locations.municipalityName}`;
+            } else if (u.municipalityName) {
+              // Fallback: check if municipalityName is directly on user object
+              municipalityLabel = ` - ${u.municipalityName}`;
+            }
+            
+            return {
+              key: u._id || u.id,
+              label: `${fullName}${municipalityLabel}`,
+            };
+          });
 
           setStakeholderOptions(opts);
           if (stakeholder && !opts.find((o: any) => o.key === stakeholder)) {
             setStakeholder('');
           }
-          console.log(`[fetchStakeholders] Loaded ${opts.length} stakeholders (filtered from ${usersList.length} total users)`);
         } else {
           setStakeholderOptions([]);
-          console.warn(`[fetchStakeholders] No stakeholders found after filtering (authority < 60). Total users: ${usersList.length}`);
         }
       } catch (err) {
-        console.error('[fetchStakeholders] Failed to load stakeholders:', err);
         setStakeholderError(
           err instanceof Error ? err.message : 'Failed to load stakeholders'
         );
@@ -505,8 +580,7 @@ export function useEventUserData(
           .then((authority) => {
             setIsSysAdmin(authority !== null && authority >= 80);
           })
-          .catch((err) => {
-            console.warn('[useEventUserData] Failed to get authority:', err);
+          .catch(() => {
             setIsSysAdmin(false);
           });
       }

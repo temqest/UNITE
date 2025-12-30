@@ -82,28 +82,13 @@ export default function CampaignToolbar({
 
   // Check if user has permission to create events/requests - PERMISSION-BASED ONLY
   useEffect(() => {
-    console.log("[Campaign Toolbar] Permission check useEffect running");
-    
     const checkCreatePermission = async () => {
       try {
-        console.log("[Campaign Toolbar] Starting permission check...");
         const rawUser = localStorage.getItem("unite_user");
-        console.log("[Campaign Toolbar] Raw user from localStorage:", rawUser ? "exists" : "not found");
         const user = rawUser ? JSON.parse(rawUser) : null;
-        console.log("[Campaign Toolbar] Full user object:", user);
-        console.log("[Campaign Toolbar] User keys:", user ? Object.keys(user) : []);
-        console.log("[Campaign Toolbar] Parsed user summary:", user ? { 
-          id: user._id || user.id || user.ID || user.userId,
-          hasPermissions: !!user.permissions, 
-          hasRoles: !!user.roles,
-          permissions: user.permissions,
-          roles: user.roles
-        } : "null");
         const token =
           localStorage.getItem("unite_token") ||
           sessionStorage.getItem("unite_token");
-        console.log("[Campaign Toolbar] Token:", token ? "exists" : "not found");
-        console.log("[Campaign Toolbar] API_URL:", API_URL);
         
         let hasPermission = false;
         
@@ -120,15 +105,7 @@ export default function CampaignToolbar({
             // Check for resource.* (e.g., 'event.*', 'request.*')
             return p === `${res}.*` || p === '*.*';
           });
-          const result = hasExactMatch || hasWildcard || hasResourceWildcard;
-          console.log(`[Campaign Toolbar] checkPermissionString: "${permString}" contains "${capability}"?`, {
-            perms,
-            hasExactMatch,
-            hasWildcard,
-            hasResourceWildcard,
-            result
-          });
-          return result;
+          return hasExactMatch || hasWildcard || hasResourceWildcard;
         };
         
         // Helper to check permissions array (handles both formats)
@@ -161,7 +138,6 @@ export default function CampaignToolbar({
         };
         
         if (!token || !API_URL) {
-          console.log("[Campaign Toolbar] Missing token or API_URL");
           setCanCreateEvent(false);
           return;
         }
@@ -173,23 +149,16 @@ export default function CampaignToolbar({
         if (!userId && token) {
           try {
             const payload = decodeJwt(token);
-            console.log("[Campaign Toolbar] JWT payload:", payload);
             userId = payload?.id || payload?.userId || payload?.user_id || payload?._id || payload?.sub;
-            console.log("[Campaign Toolbar] User ID from JWT:", userId);
           } catch (e) {
-            console.warn("[Campaign Toolbar] Failed to decode JWT:", e);
+            // Failed to decode JWT - continue without userId
           }
         }
         
-        console.log("[Campaign Toolbar] Final User ID:", userId);
-        
         // PRIORITY 1: Check localStorage permissions FIRST (faster, no API call needed)
         if (user?.permissions && Array.isArray(user.permissions) && user.permissions.length > 0) {
-          console.log("[Campaign Toolbar] Found permissions in user object:", user.permissions);
           hasPermission = checkPermissionsArray(user.permissions);
-          console.log("[Campaign Toolbar] Permission check result (localStorage):", hasPermission);
           if (hasPermission) {
-            console.log("[Campaign Toolbar] Setting canCreateEvent to TRUE (from localStorage)");
             setCanCreateEvent(true);
             return;
           }
@@ -203,7 +172,6 @@ export default function CampaignToolbar({
             headers["Authorization"] = `Bearer ${token}`;
             
             // Try /api/auth/me first (doesn't require user ID)
-            console.log("[Campaign Toolbar] Fetching current user from /api/auth/me");
             const meRes = await fetch(`${API_URL}/api/auth/me`, {
               headers,
               credentials: "include",
@@ -211,27 +179,18 @@ export default function CampaignToolbar({
             
             if (meRes.ok) {
               const meBody = await meRes.json();
-              console.log("[Campaign Toolbar] /api/auth/me response:", meBody);
-              
               const meUser = meBody.user || meBody.data || meBody;
               const permissions = meUser?.permissions || [];
               
-              console.log("[Campaign Toolbar] Extracted permissions from /api/auth/me:", permissions);
-              
               hasPermission = checkPermissionsArray(permissions);
               
-              console.log("[Campaign Toolbar] Permission check result (/api/auth/me):", hasPermission);
-              
               if (hasPermission) {
-                console.log("[Campaign Toolbar] Setting canCreateEvent to TRUE (from /api/auth/me)");
                 setCanCreateEvent(true);
                 return; // Early return if permission found via /api/auth/me
               }
-            } else {
-              console.warn("[Campaign Toolbar] /api/auth/me failed:", meRes.status, meRes.statusText);
             }
           } catch (meErr) {
-            console.warn("[Campaign Toolbar] Failed to fetch from /api/auth/me:", meErr);
+            // Failed to fetch from /api/auth/me - continue to next check
           }
         }
         
@@ -241,45 +200,26 @@ export default function CampaignToolbar({
               const headers: any = { "Content-Type": "application/json" };
               headers["Authorization"] = `Bearer ${token}`;
               
-              console.log("[Campaign Toolbar] Fetching capabilities from API:", `${API_URL}/api/users/${userId}/capabilities`);
               const res = await fetch(`${API_URL}/api/users/${userId}/capabilities`, {
                 headers,
                 credentials: "include",
               });
               
-              console.log("[Campaign Toolbar] API response status:", res.status, res.statusText);
-              
               if (res.ok) {
                 const body = await res.json();
-                console.log("[Campaign Toolbar] API response body:", body);
                 const capabilities = body.data?.capabilities || body.capabilities || body.data || [];
-                
-                console.log("[Campaign Toolbar] Extracted capabilities:", capabilities);
                 
                 // Check capabilities array
                 hasPermission = checkPermissionsArray(capabilities);
                 
-                console.log("[Campaign Toolbar] Permission check result (API):", hasPermission);
-                
                 if (hasPermission) {
-                  console.log("[Campaign Toolbar] Setting canCreateEvent to TRUE (from API)");
                   setCanCreateEvent(true);
                   return; // Early return if permission found via API
                 }
-              } else {
-                const errorBody = await res.json().catch(() => ({}));
-                console.error("[Campaign Toolbar] API error response:", res.status, errorBody);
               }
             } catch (apiErr) {
-              console.error("[Campaign Toolbar] Failed to fetch capabilities from API:", apiErr);
-              // Continue to check user object as fallback
+              // Failed to fetch capabilities - continue to check user object as fallback
             }
-          } else if (!userId && token && API_URL) {
-            console.warn("[Campaign Toolbar] Cannot call /api/users/:userId/capabilities - missing userId", {
-              userId: !!userId,
-              token: !!token,
-              API_URL: !!API_URL
-            });
           }
           
         // PRIORITY 3: Check roles for permissions
@@ -313,17 +253,13 @@ export default function CampaignToolbar({
         }
         
         // If we get here, no permission was found - set to false
-        console.log("[Campaign Toolbar] No permission found, setting canCreateEvent to false");
         setCanCreateEvent(false);
       } catch (err) {
-        console.error("[Campaign Toolbar] Error checking create permission:", err);
-        console.error("[Campaign Toolbar] Error stack:", err instanceof Error ? err.stack : "No stack trace");
         setCanCreateEvent(false);
       }
     };
     
-    checkCreatePermission().catch((err) => {
-      console.error("[Campaign Toolbar] Unhandled error in checkCreatePermission:", err);
+    checkCreatePermission().catch(() => {
       setCanCreateEvent(false);
     });
   }, [API_URL]);
@@ -529,8 +465,6 @@ export default function CampaignToolbar({
             });
             
             if (!res.ok) {
-              const errorBody = await res.json().catch(() => ({}));
-              console.error("[Campaign Toolbar] Failed to fetch coordinators:", res.status, res.statusText, errorBody);
               setAdvCoordinatorOptions([]);
               return;
             }
@@ -546,9 +480,6 @@ export default function CampaignToolbar({
               return authority >= 60 && authority < 80;
             });
             
-            if (coordinatorList.length === 0) {
-              console.warn("[Campaign Toolbar] No coordinators found after filtering (authority >= 60 and < 80). Total users from API:", list.length);
-            }
             
             const opts = (Array.isArray(coordinatorList) ? coordinatorList : []).map((c: any) => {
               // Get human-readable name from various possible fields
@@ -575,9 +506,7 @@ export default function CampaignToolbar({
             });
 
             setAdvCoordinatorOptions(opts);
-            console.log(`[Campaign Toolbar] Loaded ${opts.length} coordinators`);
           } catch (err) {
-            console.error("[Campaign Toolbar] Error fetching coordinators:", err);
             setAdvCoordinatorOptions([]);
           }
         }
@@ -659,12 +588,12 @@ export default function CampaignToolbar({
                 }]);
               }
             } catch (e) {
-              console.error("Failed to fetch coordinator by id", coordId, e);
+              // Failed to fetch coordinator by id
             }
           }
         }
       } catch (err) {
-        console.error("Failed to fetch coordinators", err);
+        // Failed to fetch coordinators
       }
     };
 
@@ -727,13 +656,10 @@ export default function CampaignToolbar({
           if (advStakeholder && !opts.find((o: any) => o.key === advStakeholder)) {
             setAdvStakeholder("");
           }
-          console.log(`[CampaignToolbar] Loaded ${opts.length} stakeholders (filtered from ${list.length} total users)`);
         } else {
-          console.warn("Failed to load stakeholders:", stBody.message || "Unknown error");
           setAdvStakeholderOptions([]);
         }
       } catch (err) {
-        console.warn("Failed to load stakeholders", err);
         setAdvStakeholderOptions([]);
       }
     };
@@ -1059,7 +985,6 @@ export default function CampaignToolbar({
                               setQMunicipalitiesList(municipalitiesFromProvider);
                             }
                           } catch (err) {
-                            console.error("Error fetching municipalities:", err);
                             // Fallback: use provider's cached municipalities
                             const municipalitiesFromProvider = getMunicipalitiesForDistrict(val);
                             setQMunicipalitiesList(municipalitiesFromProvider);

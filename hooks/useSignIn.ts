@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLoading } from '@/components/ui/loading-overlay';
+import { secureFetchJson } from '@/utils/secureFetch';
 
 /**
  * Custom hook for sign-in page logic
@@ -67,29 +68,46 @@ export function useSignIn() {
 
     try {
       // Try staff/admin/coordinator login first
-      // Note: backend mounts auth routes at /api (not /api/auth)
-      let res = await fetch(`${API_URL}/api/login`, {
+      // Use secure fetch to prevent exposing API endpoints in console errors
+      let res: Response;
+      let body: any = {};
+      
+      const { response: res1, body: body1 } = await secureFetchJson(`${API_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(payload),
+        suppressErrors: true, // Suppress console errors to avoid exposing API endpoints
       });
-
-      let body = await res.json().catch(() => ({}));
+      
+      res = res1;
+      body = body1;
 
       // If staff login failed, try stakeholder login
       if (!res.ok || body.success === false) {
-        res = await fetch(`${API_URL}/api/stakeholders/login`, {
+        const { response: res2, body: body2 } = await secureFetchJson(`${API_URL}/api/stakeholders/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify(payload),
+          suppressErrors: true, // Suppress console errors to avoid exposing API endpoints
         });
-        body = await res.json().catch(() => ({}));
+        
+        res = res2;
+        body = body2;
       }
 
       if (!res.ok || body.success === false) {
-        setError(body.message || 'Invalid credentials');
+        // Handle 404 (route not found) or account not found errors
+        // Use generic error messages that don't expose API structure
+        if (res.status === 404 || body.message?.toLowerCase().includes('not found')) {
+          setError('Account doesn\'t exist');
+        } else if (res.status === 401 || res.status === 403) {
+          setError('Invalid email or password');
+        } else {
+          // Generic error message - don't expose API error details
+          setError('Invalid email or password');
+        }
         setLoading(false);
         setGlobalLoading(false);
         return;
@@ -204,7 +222,12 @@ export function useSignIn() {
         router.push('/dashboard');
       }
     } catch (err) {
-      console.error('Sign in error:', err);
+      // Don't log errors to console in production - security best practice
+      // Only log in development for debugging
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Sign in error:', err);
+      }
+      // Generic error message - don't expose internal error details
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);

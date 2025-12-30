@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { fetchJsonWithAuth } from "@/utils/fetchWithAuth";
 
 type Province = {
@@ -78,6 +79,15 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
   const fetchingRef = useRef(false);
   const lastFetchTimeRef = useRef<number>(0);
   const MIN_FETCH_INTERVAL = 1000; // Minimum 1 second between fetches
+  const pathname = usePathname();
+  
+  // Public routes that don't need locations data (landing page, auth pages, about page)
+  const isPublicRoute = pathname === '/' || 
+                       pathname?.startsWith('/auth/') || 
+                       pathname === '/about';
+  
+  // Dashboard routes that need locations data
+  const isDashboardRoute = pathname?.startsWith('/dashboard');
 
   const isFresh = (ts: number) => Date.now() - ts < TTL;
 
@@ -92,6 +102,22 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
     const now = Date.now();
     if (!force && now - lastFetchTimeRef.current < MIN_FETCH_INTERVAL) {
       console.log("[LocationsProvider] Fetch too soon after last fetch, skipping");
+      return null;
+    }
+
+    // Check if user is authenticated before attempting to fetch
+    const token = typeof window !== "undefined"
+      ? localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token")
+      : null;
+    
+    if (!token) {
+      // No token - user not authenticated, use cached data if available
+      const stored = readStorage();
+      if (stored) {
+        setLocations(stored.data);
+        return stored.data;
+      }
+      // No cache and no token - silently return, don't attempt fetch
       return null;
     }
 
@@ -124,6 +150,25 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (e: any) {
+        // Check if it's an authentication error - if so, silently handle it
+        const isAuthError = e?.isAuthError ||
+                           e?.response?.status === 401 || 
+                           e?.response?.status === 403 ||
+                           e?.status === 401 ||
+                           e?.status === 403 ||
+                           e?.message?.toLowerCase().includes('invalid or expired token') ||
+                           e?.message?.toLowerCase().includes('authentication required');
+        
+        if (isAuthError) {
+          // User not authenticated - use cached data if available, otherwise return empty
+          const stored = readStorage();
+          if (stored) {
+            setLocations(stored.data);
+            return stored.data;
+          }
+          return null;
+        }
+        
         console.error("[LocationsProvider] Error fetching provinces:", e?.message || e);
         // Try fallback endpoint
         try {
@@ -131,7 +176,16 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
           provinces = Array.isArray(fallbackData) ? fallbackData : fallbackData.data || fallbackData.provinces || [];
           console.log(`[LocationsProvider] Fallback fetched ${provinces.length} provinces`);
         } catch (e2: any) {
-          console.error("[LocationsProvider] Fallback provinces fetch also failed:", e2?.message || e2);
+          const isAuthError2 = e2?.isAuthError ||
+                              e2?.response?.status === 401 || 
+                              e2?.response?.status === 403 ||
+                              e2?.status === 401 ||
+                              e2?.status === 403 ||
+                              e2?.message?.toLowerCase().includes('invalid or expired token') ||
+                              e2?.message?.toLowerCase().includes('authentication required');
+          if (!isAuthError2) {
+            console.error("[LocationsProvider] Fallback provinces fetch also failed:", e2?.message || e2);
+          }
         }
       }
       const provincesMap: Record<string, Province> = {};
@@ -143,9 +197,51 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
-      // Fetch all districts (endpoint is /api/districts, not /api/locations/districts)
-      const districtsData = await fetchJsonWithAuth("/api/districts?limit=10000");
-      const districts = Array.isArray(districtsData) ? districtsData : districtsData.data || districtsData.districts || [];
+      // Fetch all districts using the newer unified location system endpoint
+      let districts: any[] = [];
+      try {
+        const districtsData = await fetchJsonWithAuth("/api/locations/type/district?limit=10000");
+        districts = Array.isArray(districtsData) ? districtsData : districtsData.data || districtsData.districts || [];
+      } catch (e: any) {
+        const isAuthError = e?.isAuthError || 
+                           e?.response?.status === 401 || 
+                           e?.response?.status === 403 ||
+                           e?.status === 401 ||
+                           e?.status === 403 ||
+                           e?.message?.toLowerCase().includes('invalid or expired token') ||
+                           e?.message?.toLowerCase().includes('authentication required');
+        if (isAuthError) {
+          // User not authenticated - use cached data if available
+          const stored = readStorage();
+          if (stored) {
+            setLocations(stored.data);
+            return stored.data;
+          }
+          return null;
+        }
+        // If not auth error, try legacy endpoint as fallback (for backward compatibility)
+        try {
+          const legacyData = await fetchJsonWithAuth("/api/districts?limit=10000");
+          districts = Array.isArray(legacyData) ? legacyData : legacyData.data || legacyData.districts || [];
+        } catch (e2: any) {
+          const isAuthError2 = e2?.isAuthError ||
+                              e2?.response?.status === 401 || 
+                              e2?.response?.status === 403 ||
+                              e2?.status === 401 ||
+                              e2?.status === 403 ||
+                              e2?.message?.toLowerCase().includes('invalid or expired token') ||
+                              e2?.message?.toLowerCase().includes('authentication required');
+          if (isAuthError2) {
+            const stored = readStorage();
+            if (stored) {
+              setLocations(stored.data);
+              return stored.data;
+            }
+            return null;
+          }
+          throw e2; // Re-throw if it's not an auth error
+        }
+      }
       const districtsMap: Record<string, District> = {};
       districts.forEach((d: any) => {
         // Normalize ID to string for consistent matching
@@ -162,8 +258,29 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
       });
 
       // Fetch all municipalities
-      const municipalitiesData = await fetchJsonWithAuth("/api/locations/municipalities?limit=10000");
-      const municipalities = Array.isArray(municipalitiesData) ? municipalitiesData : municipalitiesData.data || municipalitiesData.municipalities || [];
+      let municipalities: any[] = [];
+      try {
+        const municipalitiesData = await fetchJsonWithAuth("/api/locations/municipalities?limit=10000");
+        municipalities = Array.isArray(municipalitiesData) ? municipalitiesData : municipalitiesData.data || municipalitiesData.municipalities || [];
+      } catch (e: any) {
+        const isAuthError = e?.isAuthError ||
+                           e?.response?.status === 401 || 
+                           e?.response?.status === 403 ||
+                           e?.status === 401 ||
+                           e?.status === 403 ||
+                           e?.message?.toLowerCase().includes('invalid or expired token') ||
+                           e?.message?.toLowerCase().includes('authentication required');
+        if (isAuthError) {
+          // User not authenticated - use cached data if available
+          const stored = readStorage();
+          if (stored) {
+            setLocations(stored.data);
+            return stored.data;
+          }
+          return null;
+        }
+        throw e; // Re-throw if it's not an auth error
+      }
       const municipalitiesMap: Record<string, Municipality> = {};
       municipalities.forEach((m: any) => {
         // Normalize ID to string for consistent matching
@@ -191,7 +308,27 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
       writeStorage(cache);
       setLocations(newData);
       return newData;
-    } catch (e) {
+    } catch (e: any) {
+      // Check if it's an authentication error - if so, silently handle it
+      const isAuthError = e?.isAuthError ||
+                         e?.response?.status === 401 || 
+                         e?.response?.status === 403 ||
+                         e?.status === 401 ||
+                         e?.status === 403 ||
+                         e?.message?.toLowerCase().includes('invalid or expired token') ||
+                         e?.message?.toLowerCase().includes('authentication required');
+      
+      if (isAuthError) {
+        // User not authenticated - use cached data if available
+        const stored = readStorage();
+        if (stored) {
+          setLocations(stored.data);
+          return stored.data;
+        }
+        return null;
+      }
+      
+      // Only log non-authentication errors
       console.error("Error fetching locations:", e);
       return null;
     } finally {
@@ -205,13 +342,56 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
   }, [fetchAllLocations]);
 
   useEffect(() => {
-    // Only initialize once
+    // Don't initialize on public routes (landing page, auth pages, etc.)
+    // Only initialize on dashboard routes or if user is authenticated
+    if (isPublicRoute) {
+      // Only use cached data if available, don't fetch
+      const stored = readStorage();
+      if (stored) {
+        setLocations(stored.data);
+      }
+      // Reset initialized flag when on public route so we can initialize when navigating to dashboard
+      initializedRef.current = false;
+      return;
+    }
+    
+    // For non-dashboard routes, check if authenticated before initializing
+    if (!isDashboardRoute) {
+      const token = typeof window !== "undefined"
+        ? localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token")
+        : null;
+      if (!token) {
+        // Not authenticated and not on dashboard - don't initialize
+        const stored = readStorage();
+        if (stored) {
+          setLocations(stored.data);
+        }
+        initializedRef.current = false;
+        return;
+      }
+    }
+
+    // Only initialize once per route change
     if (initializedRef.current) {
       return;
     }
     initializedRef.current = true;
 
     const initializeLocations = async () => {
+      // Check if user is authenticated before initializing
+      const token = typeof window !== "undefined"
+        ? localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token")
+        : null;
+      
+      // If no token, only use cached data if available, don't attempt to fetch
+      if (!token) {
+        const stored = readStorage();
+        if (stored) {
+          setLocations(stored.data);
+        }
+        return;
+      }
+
       const stored = readStorage();
       if (stored && isFresh(stored.ts)) {
         setLocations(stored.data);
@@ -219,22 +399,60 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
         await fetchAllLocations();
       }
 
-      // Set up periodic refresh (every 30 minutes)
+      // Set up periodic refresh (every 30 minutes) only if authenticated and on dashboard
       intervalRef.current = setInterval(() => {
-        fetchAllLocations(true);
+        // Check token and route before refreshing
+        const currentToken = typeof window !== "undefined"
+          ? localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token")
+          : null;
+        const currentPath = typeof window !== "undefined" ? window.location.pathname : pathname;
+        const isCurrentlyDashboard = currentPath?.startsWith('/dashboard');
+        if (currentToken && isCurrentlyDashboard) {
+          fetchAllLocations(true);
+        }
       }, TTL);
     };
 
     initializeLocations();
+
+    // Listen for auth changes to initialize when user logs in
+    const handleAuthChange = () => {
+      // Don't fetch on public routes
+      const currentPath = typeof window !== "undefined" ? window.location.pathname : pathname;
+      const isCurrentlyPublic = currentPath === '/' || 
+                               currentPath?.startsWith('/auth/') || 
+                               currentPath === '/about';
+      if (isCurrentlyPublic) return;
+      
+      const token = typeof window !== "undefined"
+        ? localStorage.getItem("unite_token") || sessionStorage.getItem("unite_token")
+        : null;
+      if (token && !fetchingRef.current) {
+        fetchAllLocations(true);
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("unite:auth-changed", handleAuthChange);
+      // Also listen for storage changes (token being set)
+      window.addEventListener("storage", (e) => {
+        if (e.key === "unite_token" && e.newValue && !isPublicRoute) {
+          handleAuthChange();
+        }
+      });
+    }
 
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("unite:auth-changed", handleAuthChange);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount
+  }, [pathname, isPublicRoute]); // Re-run when pathname changes
 
   const getProvinceName = useCallback((id: string) => {
     return locations.provinces[id]?.name || "Unknown Province";

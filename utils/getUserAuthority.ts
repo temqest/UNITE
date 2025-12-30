@@ -40,7 +40,6 @@ export async function getUserAuthority(
     
     // Check if cache is still valid
     if (now - cached.timestamp < CACHE_TTL) {
-      console.log(`[getUserAuthority] Using cached authority for ${userIdStr}: ${cached.authority}`);
       return cached.authority;
     } else {
       // Cache expired, remove it
@@ -103,7 +102,6 @@ export async function getUserAuthority(
       timestamp: Date.now(),
     });
 
-    console.log(`[getUserAuthority] Fetched authority for ${userIdStr}: ${authority}`);
     return authority;
   } catch (error) {
     console.error('[getUserAuthority] Error fetching user authority:', error);
@@ -118,10 +116,8 @@ export async function getUserAuthority(
 export function clearAuthorityCache(userId?: string): void {
   if (userId) {
     authorityCache.delete(userId.toString());
-    console.log(`[clearAuthorityCache] Cleared cache for ${userId}`);
   } else {
     authorityCache.clear();
-    console.log('[clearAuthorityCache] Cleared all authority cache');
   }
 }
 
