@@ -46,6 +46,7 @@ import Topbar from "@/components/layout/topbar";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
 import { getUserInfo } from "@/utils/getUserInfo";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCalendarExport } from "@/hooks/useCalendarExport";
 import { getEventActionPermissions, isAdminByAuthority, clearPermissionCache } from "@/utils/eventActionPermissions";
 import { decodeJwt } from "@/utils/decodeJwt";
 import { hasCapability } from "@/utils/permissionUtils";
@@ -87,6 +88,7 @@ export default function CalendarPage(props: any) {
   >({});
   const [detailedEvents, setDetailedEvents] = useState<Record<string, any>>({});
   const [eventsLoading, setEventsLoading] = useState(false);
+  const [isExportLoading, setIsExportLoading] = useState(false);
   // Cache for event action permissions (keyed by eventId)
   const [eventPermissionsCache, setEventPermissionsCache] = useState<
     Record<string, Awaited<ReturnType<typeof getEventActionPermissions>>>
@@ -309,6 +311,9 @@ export default function CalendarPage(props: any) {
   
   // Initialize locations provider for location resolution
   const { getProvinceName, getDistrictName, getMunicipalityName, locations } = useLocations();
+  
+  // Initialize export hook
+  const { exportVisualPDF, exportOrganizedPDF } = useCalendarExport();
   
   const [isDateTransitioning, setIsDateTransitioning] = useState(false);
   const [isViewTransitioning, setIsViewTransitioning] = useState(false);
@@ -1020,40 +1025,48 @@ export default function CalendarPage(props: any) {
   };
 
   // Handlers for toolbar actions
-  const handleExport = async () => {
+  const handleExport = async (exportType: string) => {
+    if (!exportType) return;
+    
+    setIsExportLoading(true);
     try {
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth();
-      const publicUrl = `${API_BASE}/api/public/events`;
-      const res = await fetch(publicUrl, { credentials: "include" });
-      const body = await res.json();
+      const monthYear = formatMonthYear(currentDate);
+      const filename = `calendar-${monthYear.replace(' ', '-').toLowerCase()}`;
 
-      if (res.ok && Array.isArray(body.data)) {
-        // Filter for events in the current month (public events are already approved)
-        const monthEvents = body.data.filter((event: any) => {
-          // Check if event is in current month
-          const startDate = parseServerDate(event.Start_Date);
-          if (!startDate) return false;
-          return (
-            startDate.getFullYear() === year && startDate.getMonth() === month
-          );
+      if (exportType === 'visual') {
+        // Only export if month view is active
+        if (activeView !== 'month') {
+          console.warn('Visual export only available in month view');
+          alert('Please switch to month view to export the calendar.');
+          setIsExportLoading(false);
+          return;
+        }
+
+        // Get organization name if available (could be from user context or settings)
+        const organizationName = 'Bicol Transfusion Service Center'; // Default, can be made configurable (note: "Centre" is correct spelling)
+        
+        // Pass monthEventsByDate, currentDate, and organizationName to export function
+        const result = await exportVisualPDF(monthEventsByDate, currentDate, organizationName);
+        
+        if (!result.success) {
+          const errorMsg = result.error || 'Failed to export calendar';
+          throw new Error(errorMsg);
+        }
+      } else if (exportType === 'organized') {
+        // Get all events for current month from monthEventsByDate
+        const allEvents: any[] = [];
+        Object.values(monthEventsByDate).forEach((dayEvents) => {
+          allEvents.push(...dayEvents);
         });
-
-        const blob = new Blob([JSON.stringify(monthEvents, null, 2)], {
-          type: "application/json",
-        });
-        const href = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-
-        a.href = href;
-        a.download = `calendar-${year}-${month + 1}.json`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(href);
+        
+        await exportOrganizedPDF(allEvents, monthYear, filename);
       }
-    } catch (e) {
-      // ignore export failures silently
+    } catch (error) {
+      console.error('Export failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      alert(`Export failed: ${errorMessage}`);
+    } finally {
+      setIsExportLoading(false);
     }
   };
 
@@ -1877,8 +1890,9 @@ export default function CalendarPage(props: any) {
           <div className="w-full lg:w-auto">
             <CalendarToolbar
               showCreate={allowCreate}
-              showExport={false}
+              showExport={activeView === 'month'}
               isMobile={isMobile}
+              isExporting={isExportLoading}
               onAdvancedFilter={handleAdvancedFilter}
               onCreateEvent={allowCreate ? handleCreateEvent : undefined}
               onExport={handleExport}
@@ -2000,6 +2014,7 @@ export default function CalendarPage(props: any) {
 
           {/* Month View */}
           <div
+            id="calendar-month-view"
             ref={monthViewRef}
             className={`transition-all duration-500 ease-in-out w-full ${getViewTransitionStyle("month")}`}
           >

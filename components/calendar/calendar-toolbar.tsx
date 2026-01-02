@@ -33,13 +33,14 @@ import {
 } from "@/components/campaign/event-creation-modal";
 
 interface CalendarToolbarProps {
-  onExport?: () => void;
+  onExport?: (exportType: string) => void;
   onQuickFilter?: (filter?: any) => void;
   onAdvancedFilter?: (filter?: any) => void;
   onCreateEvent?: (eventType: string, eventData: any) => void;
   showCreate?: boolean;
   showExport?: boolean;
   isMobile?: boolean;
+  isExporting?: boolean;
 }
 
 export default function CalendarToolbar({
@@ -50,6 +51,7 @@ export default function CalendarToolbar({
   showCreate = true,
   showExport = true,
   isMobile = false,
+  isExporting = false,
 }: CalendarToolbarProps) {
   const [selectedEventType, setSelectedEventType] = useState(
     new Set(["blood-drive"]),
@@ -161,17 +163,42 @@ export default function CalendarToolbar({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {showExport && (
-        <Button
-          className="border-default-200 bg-white font-medium text-xs"
-          radius="md"
-          size="sm"
-          startContent={<Download className="w-3 h-3 sm:w-4 sm:h-4" />}
-          variant="bordered"
-          onPress={onExport}
-        >
-          <span className="hidden sm:inline">Export</span>
-          <span className="sm:hidden">Export</span>
-        </Button>
+        <Dropdown>
+          <DropdownTrigger>
+            <Button
+              isLoading={isExporting}
+              className="border-default-200 bg-white font-medium text-xs"
+              radius="md"
+              size="sm"
+              startContent={!isExporting && <Download className="w-3 h-3 sm:w-4 sm:h-4" />}
+              variant="bordered"
+            >
+              <span className="hidden sm:inline">Export</span>
+              <span className="sm:hidden">Export</span>
+            </Button>
+          </DropdownTrigger>
+          <DropdownMenu
+            aria-label="Export options"
+            onAction={(key) => onExport?.(key as string)}
+          >
+            <DropdownSection title="Export Format">
+              <DropdownItem
+                key="visual"
+                description="Export calendar as it appears on screen"
+                startContent={<Download className="w-4 h-4" />}
+              >
+                Visual View (PDF)
+              </DropdownItem>
+              <DropdownItem
+                key="organized"
+                description="Export events in organized list format"
+                startContent={<Download className="w-4 h-4" />}
+              >
+                Organized List (PDF)
+              </DropdownItem>
+            </DropdownSection>
+          </DropdownMenu>
+        </Dropdown>
       )}
 
       <Dropdown>
