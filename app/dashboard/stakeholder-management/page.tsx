@@ -59,6 +59,7 @@ export default function StakeholderManagement() {
   const [stakeholders, setStakeholders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [filters, setFilters] = useState<{
     province?: string;
@@ -899,6 +900,7 @@ export default function StakeholderManagement() {
   }) => {
     setLoading(true);
     setError(null);
+    setWarning(null);
     try {
       // Build filters for capability-based endpoint
       const af = appliedFilters || filters || {};
@@ -1198,7 +1200,13 @@ export default function StakeholderManagement() {
       setStakeholders(finalMapped);
       setLoading(false);
     } catch (err: any) {
-      setError(err.message || "Unknown error");
+      const msg = err?.message || err?.body?.message || "Unknown error";
+      // Downgrade known organizationType enum validation errors to a non-fatal warning
+      if (/organizationType.*is not a valid enum value/i.test(msg)) {
+        setWarning("Some user records contain an unexpected organization type. Showing available users — please run the migration to normalize organization types.");
+      } else {
+        setError(msg);
+      }
       setLoading(false);
     }
   };
@@ -1308,7 +1316,12 @@ export default function StakeholderManagement() {
       await fetchStakeholders();
       await fetchSignupRequests();
     } catch (err: any) {
-      setError(err.message || "Failed to accept request");
+      const msg = err?.message || err?.body?.message || "Failed to accept request";
+      if (/organizationType.*is not a valid enum value/i.test(msg)) {
+        setWarning("Accepted but some user records contain an unexpected organization type. Showing available users.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setPendingAcceptId(null);
     }
@@ -1402,6 +1415,12 @@ export default function StakeholderManagement() {
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-sm text-red-700 font-medium">Error loading stakeholders</p>
             <p className="text-xs text-red-600 mt-1">{error}</p>
+          </div>
+        )}
+        {warning && (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-700 font-medium">Warning</p>
+            <p className="text-xs text-yellow-600 mt-1">{warning}</p>
           </div>
         )}
         <StakeholderTable

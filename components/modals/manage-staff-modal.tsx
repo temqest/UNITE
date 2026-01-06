@@ -71,14 +71,34 @@ export default function ManageStaffModal({
 
   // Get eventId
   const getEventId = (): string | null => {
-    return (
-      eventId ||
-      (request &&
-        (request.Event_ID ||
-          request.eventId ||
-          (request.event && request.event.Event_ID))) ||
-      null
-    );
+    // Accept multiple common shapes sent by different components
+    if (eventId) return String(eventId);
+    if (!request) return null;
+
+    const candidates = [
+      request.Event_ID,
+      request.EventId,
+      request.eventId,
+      request.event && request.event.Event_ID,
+      request.event && request.event.EventId,
+      request.event && request.event._id,
+      request._id,
+      request.event && request.event.id,
+      request.id,
+      // nested legacy shapes
+      request.request && request.request.Event_ID,
+      request.request && request.request._id,
+    ];
+
+    for (const c of candidates) {
+      if (c !== undefined && c !== null && String(c).trim() !== '') {
+        return String(c);
+      }
+    }
+
+    // no event id found
+    console.warn('[ManageStaffModal] getEventId: no event id found on request object', { request });
+    return null;
   };
 
   // Simple function to fetch staff list with timeout and retry

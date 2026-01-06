@@ -162,6 +162,33 @@ export default function CoverageAssignmentModal({
     };
   }, [locations, hideBarangays]);
 
+  // Build lookup caches for fast retrieval
+  const { districtChildrenMap, provinceAllIdsMap } = useMemo(() => {
+    const districtChildrenMap = new Map<string, string[]>();
+    const provinceAllIdsMap = new Map<string, string[]>();
+
+    // Add standalone districts
+    hierarchicalLocations.districts.forEach((d) => {
+      districtChildrenMap.set(d._id, d.children.map((m) => m._id));
+    });
+
+    // Add provinces' districts and build province -> all ids map
+    hierarchicalLocations.provinces.forEach((p) => {
+      const provinceAll: string[] = [p._id];
+      p.children.forEach((d) => {
+        provinceAll.push(d._id);
+        const munIds = d.children.map((m) => m._id);
+        provinceAll.push(...munIds);
+
+        // Ensure district map includes districts nested under provinces
+        districtChildrenMap.set(d._id, munIds);
+      });
+      provinceAllIdsMap.set(p._id, provinceAll);
+    });
+
+    return { districtChildrenMap, provinceAllIdsMap };
+  }, [hierarchicalLocations]);
+
   // Filter hierarchical locations by search query
   const filteredHierarchicalLocations = useMemo(() => {
     if (!searchQuery) return hierarchicalLocations;
@@ -296,6 +323,27 @@ export default function CoverageAssignmentModal({
   }, [isOpen, initialLocationIds]);
 
   const handleToggleLocation = (locationId: string) => {
+    // If the clicked location is a district, toggle the district and all its municipalities
+    // Use cached district -> municipality ids map if available
+    if (districtChildrenMap.has(locationId)) {
+      const munIds = districtChildrenMap.get(locationId) || [];
+      const allIds = [locationId, ...munIds];
+
+      setSelectedLocationIds((prev) => {
+        const next = new Set(prev);
+        const allSelected = allIds.every((id) => next.has(id));
+        if (allSelected) {
+          allIds.forEach((id) => next.delete(id));
+        } else {
+          allIds.forEach((id) => next.add(id));
+        }
+        return next;
+      });
+
+      return;
+    }
+
+    // Default: toggle a single location (municipality, province, or other)
     setSelectedLocationIds((prev) => {
       const next = new Set(prev);
       if (next.has(locationId)) {
@@ -309,26 +357,23 @@ export default function CoverageAssignmentModal({
 
   // Handle province selection - selects all districts and municipalities
   const handleToggleProvince = (province: Location & { children: Array<Location & { children: Location[] }> }) => {
-    // Collect all location IDs in this province (districts and municipalities)
-    const allLocationIds: string[] = [province._id];
-    
-    province.children.forEach((district) => {
-      allLocationIds.push(district._id);
-      district.children.forEach((municipality) => {
-        allLocationIds.push(municipality._id);
+    // Use cached province -> all ids map for fast retrieval
+    const allLocationIds = provinceAllIdsMap.get(province._id) || (() => {
+      const ids: string[] = [province._id];
+      province.children.forEach((d) => {
+        ids.push(d._id);
+        d.children.forEach((m) => ids.push(m._id));
       });
-    });
+      return ids;
+    })();
 
-    // Check if all are selected
     const allSelected = allLocationIds.every((id) => selectedLocationIds.has(id));
 
     setSelectedLocationIds((prev) => {
       const next = new Set(prev);
       if (allSelected) {
-        // Deselect all
         allLocationIds.forEach((id) => next.delete(id));
       } else {
-        // Select all
         allLocationIds.forEach((id) => next.add(id));
       }
       return next;

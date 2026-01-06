@@ -1,3 +1,5 @@
+import { isTokenExpired, clearAuthTokens } from './tokenManager';
+
 function getApiBase(): string {
   if (
     typeof process !== "undefined" &&
@@ -42,6 +44,21 @@ export async function fetchWithAuth(
       ? localStorage.getItem("unite_token") ||
         sessionStorage.getItem("unite_token")
       : null;
+  
+  // Check if token is expired before making the request
+  if (token && isTokenExpired(token)) {
+    console.warn('[FetchWithAuth] Token expired, clearing and redirecting to login');
+    clearAuthTokens();
+    
+    // Redirect to login page if not already there
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth')) {
+      window.location.href = '/auth/signin';
+    }
+    
+    // Return a rejected response
+    return Promise.reject(new Error('Token expired'));
+  }
+  
   const headers: Record<string, any> = {
     "Content-Type": "application/json",
     ...(init.headers || {}),
@@ -79,9 +96,8 @@ export async function fetchJsonWithAuth(
     // For 401/403 errors, mark as authentication error for easier handling
     if (res.status === 401 || res.status === 403) {
       err.isAuthError = true;
-      // Don't log 401 errors when user is not authenticated (no token)
-      // This is expected when accessing public pages without login
-      // Only log if user had a token (indicating a real auth failure)
+      
+      // Get token to check if user was authenticated
       const token =
         typeof window !== "undefined"
           ? localStorage.getItem("unite_token") ||
@@ -90,14 +106,32 @@ export async function fetchJsonWithAuth(
       const hasToken = token ? true : false;
       
       if (hasToken) {
+        // User had a token but got 401/403 - likely expired or invalid
+        console.warn('[FetchWithAuth] Authentication error - token may be expired or invalid');
+        
+        // Clear auth tokens
+        clearAuthTokens();
+        
         // Only log permission errors when user has a token but access is denied
         const isPermissionError = msg && (
           msg.toLowerCase().includes("permission denied") ||
           msg.toLowerCase().includes("permission")
         );
+        
         if (!isPermissionError) {
-          // Only log non-permission auth errors (like invalid/expired token)
+          // Token is invalid/expired - redirect to login
           console.error(`Request failed (${res.status}):`, msg);
+          
+          // Redirect to login page if not already there
+          if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth')) {
+            // Add a small delay to ensure error is thrown first
+            setTimeout(() => {
+              window.location.href = '/auth/signin';
+            }, 100);
+          }
+        } else {
+          // Permission error - user is authenticated but doesn't have permission
+          console.warn('[FetchWithAuth] Permission denied for this resource');
         }
       }
       // If no token, don't log - it's expected for public access

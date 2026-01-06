@@ -25,6 +25,7 @@ interface Stakeholder {
   phone: string;
   organization?: string;
   entity?: string; // alias for organization
+  organizationInstitution?: string;
   province?: string;
   district?: string;
   municipality?: string;
@@ -123,7 +124,11 @@ export default function StakeholderTable({
     return (
       (coordinator.name || "").toLowerCase().includes(q) ||
       (coordinator.email || "").toLowerCase().includes(q) ||
-      (coordinator.organization || coordinator.entity || "")
+      // Search both organization name and organization type when available
+      ((coordinator.organization || coordinator.entity || coordinator.organizationInstitution || "")
+        .toLowerCase()
+        .includes(q)) ||
+      ((coordinator.organizations && coordinator.organizations.length > 0 && (coordinator.organizations[0].organizationType || coordinator.organizations[0].organizationName)) || "")
         .toLowerCase()
         .includes(q) ||
       (coordinator.province || "").toLowerCase().includes(q) ||
@@ -291,7 +296,17 @@ export default function StakeholderTable({
                   {coordinator.phone}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-600">
-                  {displayValue(coordinator.organization || coordinator.entity)}
+                  {(() => {
+                    // Prefer organization type from `organizations` array if available
+                    const orgFromArray = coordinator.organizations && coordinator.organizations.length > 0 ? coordinator.organizations[0] : null;
+                    const orgType = orgFromArray?.organizationType;
+                    const orgName = orgFromArray?.organizationName;
+
+                    if (orgType) return displayValue(orgType);
+                    if (orgName) return displayValue(orgName);
+                    // Fallbacks: organizationInstitution (stored on created user), organization, entity
+                    return displayValue(coordinator.organizationInstitution || coordinator.organization || coordinator.entity);
+                  })()}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-600">
                   {displayValue(coordinator.province)}

@@ -86,19 +86,75 @@ export const performRequestAction = async (
           errorMsg = `Network error or timeout while performing action: ${action}`;
         }
         
-        const error = new Error(errorMsg);
-        
-        // Log full error details (only if res exists)
-        console.error(`[performRequestAction] ${action} failed (attempt ${attempt + 1}/${maxRetries + 1}):`, {
-          status: res?.status || 'N/A',
-          statusText: res?.statusText || 'N/A',
-          response: resp,
-          error: errorMsg,
-          hasResponse: !!res,
-        });
+        const error = new Error(errorMsg) as any;
 
-        // Don't retry on 4xx errors (client errors) - only if res exists
+        // Attach status for downstream handling
+        if (res?.status) error.status = res.status;
+
+        // Log full error details (only if res exists)
+        // Demote client (4xx) responses and transient timeouts to warnings to avoid noisy logs
         if (res?.status && res.status >= 400 && res.status < 500) {
+          console.warn(`[performRequestAction] ${action} failed (client ${res.status}) (attempt ${attempt + 1}/${maxRetries + 1}):`, {
+            status: res?.status || 'N/A',
+            statusText: res?.statusText || 'N/A',
+            response: resp,
+            error: errorMsg,
+            hasResponse: !!res,
+          });
+        } else {
+          console.error(`[performRequestAction] ${action} failed (attempt ${attempt + 1}/${maxRetries + 1}):`, {
+            status: res?.status || 'N/A',
+            statusText: res?.statusText || 'N/A',
+            response: resp,
+            error: errorMsg,
+            hasResponse: !!res,
+          });
+        }
+
+        // If this is a client error (4xx) then decide whether to treat as final
+        if (res?.status && res.status >= 400 && res.status < 500) {
+          const msg = String(errorMsg || '').toLowerCase();
+
+          // If backend indicates the action is invalid because state already changed
+          // treat it as a successful outcome for UI reconciliation: invalidate cache
+          // and dispatch refresh events so the UI can reconcile with the server state.
+          if (
+            msg.includes('not valid for request') ||
+            msg.includes('already approved') ||
+            msg.includes('already in state') ||
+            msg.includes('invalid action') ||
+            // Handle validation race where decisionHistory enum rejects duplicate confirm
+            (msg.includes('decisionhistory') && msg.includes('not a valid enum value')) ||
+            (msg.includes('not a valid enum value') && msg.includes('confirm'))
+          ) {
+            console.info(`[performRequestAction] Action appears already applied (${res.status}): ${errorMsg}. Triggering refresh.`);
+
+            // Invalidate cache and dispatch refresh just like success path
+            try {
+              const { invalidateCache } = await import("@/utils/requestCache");
+              invalidateCache(/event-requests/);
+            } catch (cacheError) {
+              console.error(`[performRequestAction] Error invalidating cache (fallback):`, cacheError);
+            }
+
+            try {
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("unite:requests-changed", {
+                  detail: { requestId, action, timestamp: Date.now(), shouldRefresh: true, forceRefresh: true }
+                }));
+                window.dispatchEvent(new CustomEvent("unite:force-refresh-requests", {
+                  detail: { requestId, reason: `${action}-action` }
+                }));
+              }
+            } catch (e) {
+              console.error(`[performRequestAction] Error dispatching fallback refresh event:`, e);
+            }
+
+            // Return the parsed response so callers can reconcile if needed
+            return resp;
+          }
+
+          // Other 4xx errors should be thrown and not retried
           throw error;
         }
 
@@ -194,11 +250,24 @@ export const performRequestAction = async (
       lastError = error;
       
       // Log full error details
-      console.error(`[performRequestAction] Error on attempt ${attempt + 1}/${maxRetries + 1}:`, {
-        error: error.message,
-        stack: error.stack,
-        name: error.name,
-      });
+      // Use warn for intermediate retry attempts to avoid noisy error logs; only use error on final failure
+      if (attempt === maxRetries) {
+        console.error(`[performRequestAction] Error on attempt ${attempt + 1}/${maxRetries + 1}:`, {
+          error: error.message,
+          stack: error.stack,
+          name: error.name,
+        });
+      } else {
+        console.warn(`[performRequestAction] Error on attempt ${attempt + 1}/${maxRetries + 1}:`, {
+          error: error.message,
+          name: error.name,
+        });
+      }
+
+      // If this error is a client-side HTTP error (4xx), don't retry
+      if (error?.status && error.status >= 400 && error.status < 500) {
+        throw error;
+      }
 
       // Don't retry on certain errors (validation errors, etc.)
       if (error.message?.includes("required") || 
@@ -263,18 +332,63 @@ export const performConfirmAction = async (requestId: string, note?: string) => 
       if (!res || !res.ok) {
         const resp = await res.json().catch(() => ({}));
         const errorMsg = resp.message || "Failed to confirm decision";
-        const error = new Error(errorMsg);
-        
-        // Log full error details
-        console.error(`[performConfirmAction] Failed (attempt ${attempt + 1}/${maxRetries + 1}):`, {
-          status: res?.status,
-          statusText: res?.statusText,
-          response: resp,
-          error: errorMsg,
-        });
+        const error = new Error(errorMsg) as any;
 
-        // Don't retry on 4xx errors (client errors)
+        if (res?.status) error.status = res.status;
+        
+        // Log full error details; demote client errors to warnings to avoid noisy logs
         if (res?.status && res.status >= 400 && res.status < 500) {
+          console.warn(`[performConfirmAction] Failed (client ${res.status}) (attempt ${attempt + 1}/${maxRetries + 1}):`, {
+            status: res?.status,
+            statusText: res?.statusText,
+            response: resp,
+            error: errorMsg,
+          });
+        } else {
+          console.error(`[performConfirmAction] Failed (attempt ${attempt + 1}/${maxRetries + 1}):`, {
+            status: res?.status,
+            statusText: res?.statusText,
+            response: resp,
+            error: errorMsg,
+          });
+        }
+
+        // If 4xx, decide whether action was already applied; if so, trigger refresh and return
+        if (res?.status && res.status >= 400 && res.status < 500) {
+          const msg = String(errorMsg || '').toLowerCase();
+          if (
+            msg.includes('not valid for request') ||
+            msg.includes('already approved') ||
+            msg.includes('already in state') ||
+            msg.includes('invalid action') ||
+            // Handle validation race where decisionHistory enum rejects duplicate confirm
+            (msg.includes('decisionhistory') && msg.includes('not a valid enum value')) ||
+            (msg.includes('not a valid enum value') && msg.includes('confirm'))
+          ) {
+            console.info(`[performConfirmAction] Action appears already applied (${res.status}): ${errorMsg}. Triggering refresh.`);
+            try {
+              const { invalidateCache } = await import("@/utils/requestCache");
+              invalidateCache(/event-requests/);
+            } catch (cacheError) {
+              console.error(`[performConfirmAction] Error invalidating cache (fallback):`, cacheError);
+            }
+
+            try {
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("unite:requests-changed", {
+                  detail: { requestId, action: "confirm", timestamp: Date.now(), shouldRefresh: true, forceRefresh: true }
+                }));
+                window.dispatchEvent(new CustomEvent("unite:force-refresh-requests", {
+                  detail: { requestId, reason: "confirm-action" }
+                }));
+              }
+            } catch (e) {
+              console.error(`[performConfirmAction] Error dispatching fallback refresh event:`, e);
+            }
+
+            return resp;
+          }
+
           throw error;
         }
 
@@ -370,11 +484,24 @@ export const performConfirmAction = async (requestId: string, note?: string) => 
       lastError = error;
       
       // Log full error details
-      console.error(`[performConfirmAction] Error on attempt ${attempt + 1}/${maxRetries + 1}:`, {
-        error: error.message,
-        stack: error.stack,
-        name: error.name,
-      });
+      // Use warn for intermediate retry attempts; only error on final attempt
+      if (attempt === maxRetries) {
+        console.error(`[performConfirmAction] Error on attempt ${attempt + 1}/${maxRetries + 1}:`, {
+          error: error.message,
+          stack: error.stack,
+          name: error.name,
+        });
+      } else {
+        console.warn(`[performConfirmAction] Error on attempt ${attempt + 1}/${maxRetries + 1}:`, {
+          error: error.message,
+          name: error.name,
+        });
+      }
+
+      // If this error is a client-side HTTP error (4xx), don't retry
+      if (error?.status && error.status >= 400 && error.status < 500) {
+        throw error;
+      }
 
       // Don't retry on certain errors (validation errors, etc.)
       if (error.message?.includes("required") || 

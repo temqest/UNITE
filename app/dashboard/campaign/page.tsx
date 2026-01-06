@@ -21,6 +21,7 @@ import EditEventModal from "@/components/campaign/event-edit-modal";
 import { useLoading } from "@/components/ui/loading-overlay";
 import { useLocations } from "../../../components/providers/locations-provider";
 import { fetchWithRetry, cancelRequests } from "@/utils/fetchWithRetry";
+import { performRequestAction, performConfirmAction } from "@/components/campaign/services/requestsService";
 import { getCachedResponse, cacheResponse, invalidateCache, DEFAULT_TTL } from "@/utils/requestCache";
 import { clearPermissionCache } from "@/utils/eventActionPermissions";
 
@@ -1362,51 +1363,49 @@ export default function CampaignPage() {
     }
 
     try {
-      const token =
-        localStorage.getItem("unite_token") ||
-        sessionStorage.getItem("unite_token");
-      const headers: any = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      // Centralized action helper handles retries only for network/5xx and avoids replays on 4xx.
+      const resp = await performRequestAction(requestId, "accept");
 
-      const body: any = {
-        action: "accept",
-      };
-      // Note: Backend validator doesn't allow note for accept action, so we don't include it
-
-      const url = `${API_URL}/api/event-requests/${requestId}/actions`;
-      const fetchOptions: RequestInit = {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      };
-
-      // Use fetchWithRetry which has proper timeout (30s) and retry logic
-      const res = await fetchWithRetry(url, fetchOptions, {
-        maxRetries: 3,
-        timeout: 30000, // 30 seconds
-      });
-
-      if (!res.ok) {
-        const resp = await res.json().catch(() => ({}));
-        const errorMsg = resp.message || resp.errors?.join(", ") || "Failed to accept request";
-        throw new Error(errorMsg);
+      // Optimistically update local state with the returned request so UI reflects
+      // the approved status immediately and does not attempt a second accept.
+      const updatedRequest = resp?.data?.request || null;
+      if (updatedRequest) {
+        setRequests((prev) =>
+          Array.isArray(prev)
+            ? prev.map((r) => {
+                const id = r?.Request_ID || r?.RequestId || r?._id || r?.requestId;
+                const updatedId =
+                  updatedRequest?.Request_ID ||
+                  updatedRequest?.RequestId ||
+                  updatedRequest?._id ||
+                  updatedRequest?.requestId;
+                if (id && updatedId && String(id) === String(updatedId)) {
+                  return { ...r, ...updatedRequest };
+                }
+                return r;
+              })
+            : prev
+        );
       }
-
-      const resp = await res.json();
 
       // Invalidate cache and refresh requests list
       invalidateCache(/event-requests/);
-      
+
       // Clear permission cache for this request's event
-      const eventId = reqObj?.Event_ID || reqObj?.eventId || reqObj?.event?.Event_ID || reqObj?.event?.EventId;
+      const eventId =
+        updatedRequest?.Event_ID ||
+        updatedRequest?.eventId ||
+        reqObj?.Event_ID ||
+        reqObj?.eventId ||
+        reqObj?.event?.Event_ID ||
+        reqObj?.event?.EventId;
       if (eventId) {
         clearPermissionCache(String(eventId));
       }
-      
+
       // Refresh requests list and dispatch event
       await fetchRequests();
-      
-      // Dispatch single refresh event
+
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("unite:requests-changed", { 
@@ -1465,46 +1464,20 @@ export default function CampaignPage() {
         body: JSON.stringify(body),
       };
 
-      // Use fetchWithRetry which has proper timeout (30s) and retry logic
-      const res = await fetchWithRetry(url, fetchOptions, {
-        maxRetries: 3,
-        timeout: 30000, // 30 seconds
-      });
+      // Use centralized service which handles retries, cache invalidation and reconciliation
+      const resp = await performConfirmAction(requestId);
 
-      if (!res.ok) {
-        const resp = await res.json().catch(() => ({}));
-        const errorMsg = resp.message || resp.errors?.join(", ") || "Failed to confirm request";
-        throw new Error(errorMsg);
-      }
-
-      const resp = await res.json();
-
-      // Invalidate cache and refresh requests list
-      invalidateCache(/event-requests/);
-      
-      // Clear permission cache for this request's event
+      // performConfirmAction will invalidate caches and dispatch refresh events when appropriate,
+      // but ensure we clear permission cache and refresh local list regardless.
       const eventId = reqObj?.Event_ID || reqObj?.eventId || reqObj?.event?.Event_ID || reqObj?.event?.EventId;
       if (eventId) {
         clearPermissionCache(String(eventId));
       } else {
         clearPermissionCache();
       }
-      
-      // Refresh requests list and dispatch event
+
+      // Refresh requests list to reflect backend state
       await fetchRequests();
-      
-      // Dispatch single refresh event
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent("unite:requests-changed", { 
-            detail: { 
-              requestId,
-              action: "confirm",
-              forceRefresh: true,
-            } 
-          })
-        );
-      }
 
       return resp;
     } catch (err: any) {

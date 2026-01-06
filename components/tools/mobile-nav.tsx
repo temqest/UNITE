@@ -16,6 +16,7 @@ import NotificationModal from "@/components/modals/notification-modal";
 import SettingsModal from "@/components/modals/settings-modal";
 import { getUserInfo } from "@/utils/getUserInfo";
 import { fetchJsonWithAuth } from "@/utils/fetchWithAuth";
+import { useSidebarNavigation } from "@/hooks/useSidebarNavigation";
 import { useRouter } from "next/navigation";
 
 interface MobileNavProps {
@@ -115,16 +116,20 @@ export default function MobileNav({ currentUserName, currentUserEmail }: MobileN
   const userInitials = userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
   const userEmail = currentUserEmail || ((_raw.Email || _raw.email || _info?.email) as string) || "";
 
-  // --- Role Logic ---
-  const roleLower = ((_info && (_info.role as any)) || "").toString().toLowerCase();
-  const staffType = (_raw?.StaffType || _raw?.Staff_Type || _raw?.staff_type || _raw?.staffType || _raw?.user?.StaffType) as string | null;
-  const staffTypeLower = staffType ? String(staffType).toLowerCase() : "";
+  // --- Permission-based visibility (use same hook as Sidebar) ---
+  const { menuItems } = useSidebarNavigation();
 
-  const isSystemAdmin = Boolean((_info && (_info.isAdmin))) || staffTypeLower === "admin" || roleLower === "admin" || (roleLower.includes("sys") && roleLower.includes("admin"));
-  const isCoordinator = (staffType && staffTypeLower === "coordinator") || roleLower.includes("coordinator");
+  const showCoordinatorLink = Boolean(
+    (menuItems || []).some(
+      (item: any) => item.id === "coordinator-management" && item.visible,
+    ),
+  );
 
-  const showCoordinatorLink = Boolean(isSystemAdmin);
-  const showStakeholderLink = Boolean(isSystemAdmin || isCoordinator);
+  const showStakeholderLink = Boolean(
+    (menuItems || []).some(
+      (item: any) => item.id === "stakeholder-management" && item.visible,
+    ),
+  );
 
   // --- Prevent scrolling when drawer is open ---
   useEffect(() => {

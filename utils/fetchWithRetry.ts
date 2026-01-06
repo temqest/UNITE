@@ -19,12 +19,14 @@ interface RetryOptions {
   retryableErrors?: string[];
 }
 
+// Default retryable status codes focus on transient conditions only.
 const DEFAULT_OPTIONS: Required<RetryOptions> = {
   maxRetries: 3,
   initialDelay: 1000, // 1 second
   maxDelay: 16000, // 16 seconds
   timeout: 30000, // 30 seconds
-  retryableStatusCodes: [500, 502, 503, 504, 0], // 0 for network errors
+  // Retry only on transient server/network issues. Exclude 4xx.
+  retryableStatusCodes: [500, 502, 503, 504, 408, 429],
   retryableErrors: ['timeout', 'aborted', 'network', 'fetch', 'Failed to fetch']
 };
 
@@ -32,6 +34,18 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
  * Check if an error is retryable
  */
 function isRetryableError(error: any, options: Required<RetryOptions>): boolean {
+  const message = String(error?.message || error || '').toLowerCase();
+
+  // Do NOT retry on known business/validation messages
+  if (
+    message.includes('not valid for request') ||
+    message.includes('already approved') ||
+    message.includes('already in state') ||
+    message.includes('invalid action')
+  ) {
+    return false;
+  }
+
   // Check if it's a network error
   if (error instanceof TypeError && error.message.includes('fetch')) {
     return true;
@@ -43,9 +57,8 @@ function isRetryableError(error: any, options: Required<RetryOptions>): boolean 
   }
   
   // Check error message for retryable patterns
-  const errorMessage = String(error?.message || error || '').toLowerCase();
   for (const pattern of options.retryableErrors) {
-    if (errorMessage.includes(pattern.toLowerCase())) {
+    if (message.includes(pattern.toLowerCase())) {
       return true;
     }
   }
@@ -99,9 +112,9 @@ export async function fetchWithRetry(
         
         clearTimeout(timeoutId);
         
-        // Check if response is retryable (5xx errors)
-        if (!response.ok && opts.retryableStatusCodes.includes(response.status)) {
-          if (attempt < opts.maxRetries) {
+        // Check if response is retryable (transient errors only)
+        if (!response.ok) {
+          if (opts.retryableStatusCodes.includes(response.status) && attempt < opts.maxRetries) {
             const delay = calculateDelay(attempt, opts);
             console.warn(
               `[fetchWithRetry] Request failed with ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${opts.maxRetries})`
@@ -109,6 +122,9 @@ export async function fetchWithRetry(
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;
           }
+
+          // Non-retryable HTTP status → surface immediately
+          return response;
         }
         
         // Success or non-retryable error
