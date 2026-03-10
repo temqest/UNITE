@@ -123,13 +123,13 @@ export default function Sidebar({
       href: "/dashboard/events-management",
       icon: LayoutList,
       key: "events-management",
-      visible: menuItems.some(item => item.id === 'events-management' && item.visible),
+      visible: false, // menuItems.some(item => item.id === 'events-management' && item.visible),
     },
     {
       href: "/dashboard/inventory",
       icon: Box,
       key: "inventory",
-      visible: menuItems.some(item => item.id === 'inventory' && item.visible),
+      visible: false, // menuItems.some(item => item.id === 'inventory' && item.visible),
     },
     {
       href: "/dashboard/chat",
@@ -247,10 +247,9 @@ export default function Sidebar({
   ) => {
     const isActive = pathname === href;
 
-    // When `visible` is false, render the same DOM structure but hide it
-    // visually and make it non-interactive. This preserves element order
-    // and attributes across SSR and the initial client render.
-    const hiddenClasses = !visible ? "invisible pointer-events-none" : "";
+    // When `visible` is false, we use 'hidden' to remove it from the DOM flow completely 
+    // so it collapses the space, instead of 'invisible' which maintains an empty gap.
+    const hiddenClasses = !visible ? "hidden" : "inline-flex";
 
     // Render a Next <Link> with attributes applied directly to the anchor
     // so we control attribute presence on both server and client. Avoid
@@ -260,7 +259,7 @@ export default function Sidebar({
       <Link
         key={key}
         aria-hidden={visible ? "false" : "true"}
-        className={`w-10 h-10 inline-flex items-center justify-center rounded-full transition-colors duration-200 ${hiddenClasses} ${
+        className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors duration-200 ${hiddenClasses} ${
           isActive
             ? "bg-danger text-white"
             : "text-black border border-gray-300 hover:bg-gray-100"
