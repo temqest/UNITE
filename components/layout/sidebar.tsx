@@ -9,6 +9,8 @@ import {
   Bell,
   Comments,
   PersonPlanetEarth,
+  Box,
+  LayoutList,
 } from "@gravity-ui/icons";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -116,6 +118,18 @@ export default function Sidebar({
       icon: Calendar,
       key: "calendar",
       visible: menuItems.some(item => item.id === 'calendar' && item.visible),
+    },
+    {
+      href: "/dashboard/events-management",
+      icon: LayoutList,
+      key: "events-management",
+      visible: menuItems.some(item => item.id === 'events-management' && item.visible),
+    },
+    {
+      href: "/dashboard/inventory",
+      icon: Box,
+      key: "inventory",
+      visible: menuItems.some(item => item.id === 'inventory' && item.visible),
     },
     {
       href: "/dashboard/chat",

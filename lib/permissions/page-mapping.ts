@@ -51,6 +51,16 @@ export const PAGE_PERMISSION_MAP: Record<string, PagePermissionConfig> = {
     requiredPermissions: ['event.read'],
     requireAll: false,
   },
+  'events-management': {
+    route: 'events-management',
+    requiredPermissions: ['event.read'],
+    requireAll: false,
+  },
+  inventory: {
+    route: 'inventory',
+    requiredPermissions: [],
+    requireAll: false,
+  },
   chat: {
     route: 'chat',
     // Chat permissions - to be determined from backend

@@ -30,6 +30,16 @@ const DEFAULT_MENU_ITEMS: Omit<MenuItem, 'visible'>[] = [
     route: '/dashboard/calendar',
   },
   {
+    id: 'events-management',
+    label: 'Events Management',
+    route: '/dashboard/events-management',
+  },
+  {
+    id: 'inventory',
+    label: 'Inventory',
+    route: '/dashboard/inventory',
+  },
+  {
     id: 'chat',
     label: 'Chat',
     route: '/dashboard/chat',
@@ -110,7 +120,18 @@ export function useSidebarNavigation() {
 
       // If we have accessiblePages from backend, use that (most reliable)
       if (accessiblePages.length > 0) {
-        return accessiblePages.includes(pageRoute);
+        const candidates = [
+          pageRoute,
+          `/${pageRoute}`,
+          `/dashboard/${pageRoute}`,
+          pageConfig.route,
+          `/${pageConfig.route}`,
+          `/dashboard/${pageConfig.route}`,
+        ];
+
+        return candidates.some((candidate) =>
+          accessiblePages.includes(candidate),
+        );
       }
 
       // Fallback: Check permissions directly if accessiblePages not available
@@ -137,7 +158,7 @@ export function useSidebarNavigation() {
   const menuItems: MenuItem[] = useMemo(() => {
     return DEFAULT_MENU_ITEMS.map((item) => ({
       ...item,
-      visible: isPageVisible(item.id),
+      visible: item.id === "events-management" ? true : isPageVisible(item.id),
     })).filter((item) => item.visible);
   }, [isPageVisible]);
 

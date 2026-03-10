@@ -13,6 +13,10 @@ export const siteConfig = {
       label: "Calendar",
       href: "/calendar",
     },
+    {
+      label: "Join Waitlist",
+      href: "/waitlist",
+    },
   ],
   navMenuItems: [
     {
@@ -22,6 +26,10 @@ export const siteConfig = {
     {
       label: "Calendar",
       href: "/calendar",
+    },
+    {
+      label: "Join Waitlist",
+      href: "/waitlist",
     },
   ],
   links: {
