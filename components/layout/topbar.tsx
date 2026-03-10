@@ -78,16 +78,6 @@ export default function Topbar({
         {/* Right side - Search Input (hidden on mobile) */}
         <div className="flex items-center gap-3">
           <Button
-            as={Link}
-            className="hidden sm:inline-flex font-medium text-white shadow-sm"
-            color="danger"
-            href="/waitlist"
-            radius="lg"
-            size="md"
-          >
-            Join Waitlist
-          </Button>
-          <Button
             className=" hidden sm:inline-flex text-default bg-gray-100 borderursor-pointer text-xs"
             radius="lg"
             size="md"
